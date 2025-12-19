@@ -15,8 +15,9 @@ class PaymentHandler(BaseHandler):
     Single Responsibility: тільки платежі
     """
     
-    def __init__(self, chat_repo, premium_repo, bot: Bot):
+    def __init__(self, chat_repo, premium_repo, bot: Bot, userbot=None):
         self.bot = bot
+        self.userbot = userbot
         self.logger = logging.getLogger(__name__)
         super().__init__(chat_repo, premium_repo)
     
@@ -31,6 +32,8 @@ class PaymentHandler(BaseHandler):
         # Адмін-команди
         self.router.message(Command("admin_add_payment"))(self.cmd_admin_add_payment)
         self.router.message(Command("admin_payments"))(self.cmd_admin_payments)
+        self.router.message(Command("admin_grant_premium"))(self.cmd_admin_grant_premium)
+        self.router.message(Command("admin_revoke_premium"))(self.cmd_admin_revoke_premium)
         
         self.router.pre_checkout_query()(self.process_pre_checkout)
         self.router.message(F.successful_payment)(self.process_successful_payment)
@@ -304,4 +307,286 @@ class PaymentHandler(BaseHandler):
             )
         
         await message.answer(payments_text, parse_mode="HTML")
+    
+    async def cmd_admin_grant_premium(self, message: Message):
+        """
+        Адмін-команда: Видати Premium користувачу
+        Формат: 
+        - /admin_grant_premium <user_id> <days>
+        - /admin_grant_premium @username <days>
+        - /admin_grant_premium <days> (у відповідь на повідомлення)
+        """
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+        
+        parts = message.text.split()
+        
+        # Варіант 1: У відповідь на повідомлення
+        if message.reply_to_message:
+            if len(parts) < 2:
+                await message.answer("❌ Вкажіть кількість днів")
+                return
+            
+            user_id = str(message.reply_to_message.from_user.id)
+            username = message.reply_to_message.from_user.username or "користувач"
+            try:
+                days = int(parts[1])
+            except ValueError:
+                await message.answer("❌ Кількість днів має бути числом")
+                return
+        
+        # Варіант 2: З параметрами
+        elif len(parts) >= 3:
+            user_identifier = parts[1]
+            
+            # Перевіряємо чи це username
+            if user_identifier.startswith('@'):
+                username_to_find = user_identifier[1:]  # Без @
+                
+                # Шукаємо в базі даних чату
+                from utils.helpers import get_clean_chat_id
+                
+                # Якщо команда в групі - шукаємо в цьому чаті
+                if message.chat.type in ['group', 'supergroup']:
+                    chat_id = get_clean_chat_id(message.chat.id)
+                    
+                    # Шукаємо user_id по username через userbot
+                    user_id = None
+                    username = None
+                    
+                    if self.userbot:
+                        try:
+                            async for user in self.userbot.client.iter_participants(message.chat.id):
+                                if user.username and user.username.lower() == username_to_find.lower():
+                                    user_id = str(user.id)
+                                    username = user.username
+                                    break
+                        except Exception as e:
+                            self.logger.error(f"Error finding user by username: {e}")
+                    
+                    if not user_id:
+                        await message.answer(
+                            f"❌ Користувача @{username_to_find} не знайдено в цьому чаті.\n\n"
+                            "<b>Використайте один з варіантів:</b>\n"
+                            "1️⃣ У відповідь на повідомлення користувача:\n"
+                            "   <code>/admin_grant_premium 30</code>\n\n"
+                            "2️⃣ За User ID:\n"
+                            "   <code>/admin_grant_premium 831190060 30</code>\n\n"
+                            "<i>💡 User ID можна дізнатися через @userinfobot</i>",
+                            parse_mode="HTML"
+                        )
+                        return
+                else:
+                    await message.answer(
+                        "❌ Видача Premium по @username працює тільки в групових чатах.\n\n"
+                        "<b>Використайте:</b>\n"
+                        "• За User ID: <code>/admin_grant_premium 831190060 30</code>",
+                        parse_mode="HTML"
+                    )
+                    return
+            else:
+                user_id = user_identifier
+                username = None
+            
+            try:
+                days = int(parts[2])
+            except ValueError:
+                await message.answer("❌ Кількість днів має бути числом")
+                return
+        
+        else:
+            await message.answer(
+                "❌ Неправильний формат.\n\n"
+                "<b>Використання:</b>\n\n"
+                "1️⃣ <b>У відповідь на повідомлення:</b>\n"
+                "<code>/admin_grant_premium 30</code>\n\n"
+                "2️⃣ <b>За User ID:</b>\n"
+                "<code>/admin_grant_premium 831190060 30</code>\n\n"
+                "3️⃣ <b>За @username (в групі):</b>\n"
+                "<code>/admin_grant_premium @username 30</code>\n\n"
+                "<b>Приклади:</b>\n"
+                "• /admin_grant_premium 831190060 30 — місяць\n"
+                "• /admin_grant_premium @user 365 — рік\n"
+                "• /admin_grant_premium 831190060 7 — тиждень\n\n"
+                "<i>💡 Найпростіше: відповісти на повідомлення користувача</i>",
+                parse_mode="HTML"
+            )
+            return
+        
+        try:
+            if days <= 0:
+                await message.answer("❌ Кількість днів має бути більше 0")
+                return
+            
+            # Надаємо Premium
+            expiry = self.premium_repo.grant_premium(user_id, days)
+            
+            # Визначаємо період для повідомлення
+            if days == 30:
+                period_text = "місяць"
+            elif days == 365:
+                period_text = "рік"
+            elif days == 7:
+                period_text = "тиждень"
+            else:
+                period_text = f"{days} днів"
+            
+            user_display = f"@{username}" if username else f"<code>{user_id}</code>"
+            
+            await message.answer(
+                f"✅ <b>Premium надано!</b>\n\n"
+                f"👤 Користувач: {user_display}\n"
+                f"🆔 User ID: <code>{user_id}</code>\n"
+                f"⏰ Період: {period_text} ({days} днів)\n"
+                f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                f"<i>Користувач тепер може використовувати /superunreg</i>",
+                parse_mode="HTML"
+            )
+            
+            # Спробуємо повідомити користувача
+            try:
+                await self.bot.send_message(
+                    int(user_id),
+                    f"🎉 <b>Вітаємо!</b>\n\n"
+                    f"Вам надано 👑 Premium статус на {period_text}!\n"
+                    f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                    f"Тепер ви можете використовувати /superunreg для постійного вимкнення пінгів.",
+                    parse_mode="HTML"
+                )
+                self.logger.info(f"Користувача {user_id} повідомлено про Premium")
+            except Exception as e:
+                self.logger.warning(f"Не вдалося повідомити користувача {user_id}: {e}")
+            
+            self.logger.info(f"Admin granted {days} days premium to user {user_id}")
+            
+        except ValueError:
+            await message.answer("❌ Кількість днів має бути числом")
+        except Exception as e:
+            await message.answer(f"❌ Помилка: {e}")
+
+
+    async def cmd_admin_revoke_premium(self, message: Message):
+        """
+        Адмін-команда: Забрати Premium у користувача
+        Формат: 
+        - /admin_revoke_premium <user_id>
+        - /admin_revoke_premium @username
+        - /admin_revoke_premium (у відповідь на повідомлення)
+        """
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+        
+        parts = message.text.split()
+        
+        # Варіант 1: У відповідь на повідомлення
+        if message.reply_to_message:
+            user_id = str(message.reply_to_message.from_user.id)
+            username = message.reply_to_message.from_user.username or "користувач"
+        
+        # Варіант 2: З параметрами
+        elif len(parts) >= 2:
+            user_identifier = parts[1]
+            
+            # Перевіряємо чи це username
+            if user_identifier.startswith('@'):
+                username_to_find = user_identifier[1:]
+                
+                from utils.helpers import get_clean_chat_id
+                
+                if message.chat.type in ['group', 'supergroup']:
+                    user_id = None
+                    username = None
+                    
+                    if self.userbot:
+                        try:
+                            async for user in self.userbot.client.iter_participants(message.chat.id):
+                                if user.username and user.username.lower() == username_to_find.lower():
+                                    user_id = str(user.id)
+                                    username = user.username
+                                    break
+                        except Exception as e:
+                            self.logger.error(f"Error finding user by username: {e}")
+                    
+                    if not user_id:
+                        await message.answer(
+                            f"❌ Користувача @{username_to_find} не знайдено в цьому чаті.\n\n"
+                            "<b>Використайте один з варіантів:</b>\n"
+                            "1️⃣ У відповідь на повідомлення користувача:\n"
+                            "   <code>/admin_revoke_premium</code>\n\n"
+                            "2️⃣ За User ID:\n"
+                            "   <code>/admin_revoke_premium 831190060</code>",
+                            parse_mode="HTML"
+                        )
+                        return
+                else:
+                    await message.answer(
+                        "❌ Видалення Premium по @username працює тільки в групових чатах.\n\n"
+                        "<b>Використайте:</b>\n"
+                        "• За User ID: <code>/admin_revoke_premium 831190060</code>",
+                        parse_mode="HTML"
+                    )
+                    return
+            else:
+                user_id = user_identifier
+                username = None
+        
+        else:
+            await message.answer(
+                "❌ Неправильний формат.\n\n"
+                "<b>Використання:</b>\n\n"
+                "1️⃣ <b>У відповідь на повідомлення:</b>\n"
+                "<code>/admin_revoke_premium</code>\n\n"
+                "2️⃣ <b>За User ID:</b>\n"
+                "<code>/admin_revoke_premium 831190060</code>\n\n"
+                "3️⃣ <b>За @username (в групі):</b>\n"
+                "<code>/admin_revoke_premium @username</code>\n\n"
+                "<i>💡 Найпростіше: відповісти на повідомлення користувача</i>",
+                parse_mode="HTML"
+            )
+            return
+        
+        try:
+            # Перевіряємо чи є Premium
+            if not self.premium_repo.has_premium(user_id):
+                await message.answer(
+                    f"❌ У користувача немає Premium статусу.\n\n"
+                    f"🆔 User ID: <code>{user_id}</code>",
+                    parse_mode="HTML"
+                )
+                return
+            
+            # Забираємо Premium
+            revoked = self.premium_repo.revoke_premium(user_id)
+            
+            if revoked:
+                user_display = f"@{username}" if username else f"<code>{user_id}</code>"
+                
+                await message.answer(
+                    f"✅ <b>Premium відібрано!</b>\n\n"
+                    f"👤 Користувач: {user_display}\n"
+                    f"🆔 User ID: <code>{user_id}</code>\n\n"
+                    f"<i>Користувач більше не може використовувати /superunreg</i>",
+                    parse_mode="HTML"
+                )
+                
+                # Спробуємо повідомити користувача
+                try:
+                    await self.bot.send_message(
+                        int(user_id),
+                        f"⚠️ <b>Повідомлення</b>\n\n"
+                        f"Ваш 👑 Premium статус скасовано.\n\n"
+                        f"Команда /superunreg більше недоступна.\n"
+                        f"Для відновлення Premium: /premium",
+                        parse_mode="HTML"
+                    )
+                    self.logger.info(f"Користувача {user_id} повідомлено про скасування Premium")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося повідомити користувача {user_id}: {e}")
+                
+                self.logger.info(f"Admin revoked premium from user {user_id}")
+            else:
+                await message.answer("❌ Не вдалося відібрати Premium")
+                
+        except Exception as e:
+            await message.answer(f"❌ Помилка: {e}")
 

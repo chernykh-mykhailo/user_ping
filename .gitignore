@@ -33,6 +33,11 @@ env/
 *.swo
 *~
 
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
 # Telegram Sessions
 *.session
 *.session-journal
@@ -48,17 +53,20 @@ users_data.json
 .env
 .env.local
 
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
 # Temporary files
 *.tmp
 *.temp
 *.bak
+*.pid
 *_legacy.py
 *_old.py
+
+# Documentation and analysis (internal use only)
+competitors/
+docs/
+*.md.backup
+CLEAN_HISTORY.md
+GIT_SETUP.md
 
 # Config with sensitive data (use config.example.py instead)
 config.py

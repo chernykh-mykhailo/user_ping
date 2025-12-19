@@ -160,6 +160,151 @@ class ChatRepository:
             "temp_unreg": temp_unreg,
             "super_unreg": super_unreg
         }
+    
+    def add_call_template(self, chat_id: str, name: str, text: str) -> bool:
+        """Додає шаблон виклику"""
+        data = self.db.load()
+        chat_data = self.get_chat_data(chat_id)
+        
+        if "call_templates" not in data[chat_id]:
+            data[chat_id]["call_templates"] = {}
+        
+        data[chat_id]["call_templates"][name] = text
+        self.db.save(data)
+        return True
+    
+    def remove_call_template(self, chat_id: str, name: str) -> bool:
+        """Видаляє шаблон виклику"""
+        data = self.db.load()
+        
+        if chat_id in data and "call_templates" in data[chat_id]:
+            if name in data[chat_id]["call_templates"]:
+                del data[chat_id]["call_templates"][name]
+                self.db.save(data)
+                return True
+        return False
+    
+    def get_call_templates(self, chat_id: str) -> Dict[str, str]:
+        """Повертає всі шаблони викликів"""
+        chat_data = self.get_chat_data(chat_id)
+        return chat_data.get("call_templates", {})
+    
+    def set_stop_flag(self, chat_id: str, value: bool) -> None:
+        """Встановлює прапорець зупинки виклику"""
+        data = self.db.load()
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+        
+        data[chat_id]["stop_call"] = value
+        self.db.save(data)
+    
+    def get_stop_flag(self, chat_id: str) -> bool:
+        """Перевіряє прапорець зупинки"""
+        chat_data = self.get_chat_data(chat_id)
+        return chat_data.get("stop_call", False)
+    
+    # === Call Triggers ===
+    
+    def create_call_trigger(self, chat_id: str, trigger_name: str) -> bool:
+        """Створює новий тригер виклику"""
+        data = self.db.load()
+        
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+        
+        if "call_triggers" not in data[chat_id]:
+            data[chat_id]["call_triggers"] = {}
+        
+        if trigger_name in data[chat_id]["call_triggers"]:
+            return False  # Тригер вже існує
+        
+        data[chat_id]["call_triggers"][trigger_name] = []
+        self.db.save(data)
+        return True
+    
+    def delete_call_trigger(self, chat_id: str, trigger_name: str) -> bool:
+        """Видаляє тригер виклику"""
+        data = self.db.load()
+        
+        if chat_id in data and "call_triggers" in data[chat_id]:
+            if trigger_name in data[chat_id]["call_triggers"]:
+                del data[chat_id]["call_triggers"][trigger_name]
+                self.db.save(data)
+                return True
+        return False
+    
+    def add_user_to_trigger(self, chat_id: str, trigger_name: str, user_id: str) -> bool:
+        """Додає користувача до тригера"""
+        data = self.db.load()
+        
+        if chat_id not in data or "call_triggers" not in data[chat_id]:
+            return False
+        
+        if trigger_name not in data[chat_id]["call_triggers"]:
+            return False
+        
+        if user_id not in data[chat_id]["call_triggers"][trigger_name]:
+            data[chat_id]["call_triggers"][trigger_name].append(user_id)
+            self.db.save(data)
+        
+        return True
+    
+    def remove_user_from_trigger(self, chat_id: str, trigger_name: str, user_id: str) -> bool:
+        """Видаляє користувача з тригера"""
+        data = self.db.load()
+        
+        if chat_id not in data or "call_triggers" not in data[chat_id]:
+            return False
+        
+        if trigger_name not in data[chat_id]["call_triggers"]:
+            return False
+        
+        if user_id in data[chat_id]["call_triggers"][trigger_name]:
+            data[chat_id]["call_triggers"][trigger_name].remove(user_id)
+            self.db.save(data)
+            return True
+        
+        return False
+    
+    def get_call_triggers(self, chat_id: str) -> Dict[str, list]:
+        """Повертає всі тригери чату"""
+        chat_data = self.get_chat_data(chat_id)
+        return chat_data.get("call_triggers", {})
+    
+    def get_trigger_users(self, chat_id: str, trigger_name: str) -> list:
+        """Повертає список користувачів тригера"""
+        triggers = self.get_call_triggers(chat_id)
+        return triggers.get(trigger_name, [])
+    
+    def set_trigger_emoji(self, chat_id: str, trigger_name: str, emoji: str) -> bool:
+        """Встановлює емодзі для тригера"""
+        data = self.db.load()
+        
+        if chat_id not in data or "call_triggers" not in data[chat_id]:
+            return False
+        
+        if trigger_name not in data[chat_id]["call_triggers"]:
+            return False
+        
+        if "trigger_emojis" not in data[chat_id]:
+            data[chat_id]["trigger_emojis"] = {}
+        
+        data[chat_id]["trigger_emojis"][trigger_name] = emoji
+        self.db.save(data)
+        return True
+    
+    def get_trigger_emoji(self, chat_id: str, trigger_name: str) -> str:
+        """Повертає емодзі тригера"""
+        chat_data = self.get_chat_data(chat_id)
+        emojis = chat_data.get("trigger_emojis", {})
+        return emojis.get(trigger_name, "🎯")
+    
+    def get_all_trigger_emojis(self, chat_id: str) -> dict:
+        """Повертає всі емодзі тригерів"""
+        chat_data = self.get_chat_data(chat_id)
+        return chat_data.get("trigger_emojis", {})
+
+
 
 
 class PremiumRepository:

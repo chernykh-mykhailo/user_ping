@@ -85,7 +85,8 @@ class PingBot:
         self.payment_handler = PaymentHandler(
             self.chat_repo,
             self.premium_repo,
-            self.bot
+            self.bot,
+            self.userbot
         )
         
         # Реєстрація роутерів
