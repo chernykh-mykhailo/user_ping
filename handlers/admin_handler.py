@@ -32,7 +32,10 @@ class AdminHandler(BaseHandler):
         self.router.message(Command("stats"))(self.cmd_stats)
         self.router.message(F.text.regexp(r'^!?стата', flags=0))(self.cmd_stats)
         
+        
         self.router.message(Command("admin_settings"))(self.cmd_admin_settings)
+        self.router.message(Command("admin_add_trigger"))(self.cmd_admin_add_trigger)
+        self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -134,3 +137,37 @@ class AdminHandler(BaseHandler):
                 await message.answer(f"✅ Global Delay set to {delay}s")
             except ValueError:
                 await message.answer("❌ Invalid number")
+
+    async def cmd_admin_add_trigger(self, message: Message):
+        """Додає глобальний тригер (Owner only)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2:
+            await message.answer("Usage: /admin_add_trigger [word] [text|emoji]")
+            return
+            
+        trigger = args[1].lower()
+        type_ = args[2].lower() if len(args) > 2 else "text"
+        if type_ not in ["text", "emoji"]:
+            type_ = "text"
+            
+        self.chat_repo.add_global_ping_trigger(trigger, type_)
+        await message.answer(f"✅ Global Trigger '{trigger}' added as {type_}")
+
+    async def cmd_admin_del_trigger(self, message: Message):
+        """Видаляє глобальний тригер (Owner only)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2:
+            await message.answer("Usage: /admin_del_trigger [word]")
+            return
+            
+        trigger = args[1].lower()
+        if self.chat_repo.remove_global_ping_trigger(trigger):
+            await message.answer(f"✅ Global Trigger '{trigger}' removed")
+        else:
+            await message.answer(f"❌ Global Trigger '{trigger}' not found")

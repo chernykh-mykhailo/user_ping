@@ -104,12 +104,19 @@ class ChatRepository:
     def add_to_temp_unreg(self, chat_id: str, user_id: str) -> bool:
         """Додає до тимчасового анрегу"""
         data = self.db.load()
-        chat_data = self.get_chat_data(chat_id)
         
-        if user_id in chat_data.get("super_unreg", []):
+        # Ініціалізуємо чат, якщо не існує
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+        if "temp_unreg" not in data[chat_id]:
+            data[chat_id]["temp_unreg"] = []
+        if "super_unreg" not in data[chat_id]:
+            data[chat_id]["super_unreg"] = []
+        
+        if user_id in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].remove(user_id)
         
-        if user_id not in chat_data.get("temp_unreg", []):
+        if user_id not in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].append(user_id)
             self.db.save(data)
             return True
@@ -118,12 +125,19 @@ class ChatRepository:
     def add_to_super_unreg(self, chat_id: str, user_id: str) -> bool:
         """Додає до постійного анрегу"""
         data = self.db.load()
-        chat_data = self.get_chat_data(chat_id)
         
-        if user_id in chat_data.get("temp_unreg", []):
+        # Ініціалізуємо чат, якщо не існує
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+        if "temp_unreg" not in data[chat_id]:
+            data[chat_id]["temp_unreg"] = []
+        if "super_unreg" not in data[chat_id]:
+            data[chat_id]["super_unreg"] = []
+        
+        if user_id in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].remove(user_id)
         
-        if user_id not in chat_data.get("super_unreg", []):
+        if user_id not in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].append(user_id)
             self.db.save(data)
             return True
@@ -132,13 +146,20 @@ class ChatRepository:
     def remove_from_unreg(self, chat_id: str, user_id: str) -> bool:
         """Видаляє з обох списків анрегу"""
         data = self.db.load()
-        chat_data = self.get_chat_data(chat_id)
+        
+        # Ініціалізуємо чат, якщо не існує
+        if chat_id not in data:
+            return False  # Нічого видаляти
+        if "temp_unreg" not in data[chat_id]:
+            data[chat_id]["temp_unreg"] = []
+        if "super_unreg" not in data[chat_id]:
+            data[chat_id]["super_unreg"] = []
         
         removed = False
-        if user_id in chat_data.get("temp_unreg", []):
+        if user_id in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].remove(user_id)
             removed = True
-        if user_id in chat_data.get("super_unreg", []):
+        if user_id in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].remove(user_id)
             removed = True
         
@@ -343,6 +364,69 @@ class ChatRepository:
             
         data["global_settings"][key] = value
         self.db.save(data)
+    
+    # === Custom Ping Triggers ===
+    
+    def add_custom_ping_trigger(self, chat_id: str, trigger: str, start_type: str = "text") -> bool:
+        """Додає кастомний тригер для пінгу"""
+        data = self.db.load()
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+            
+        if "custom_ping_triggers" not in data[chat_id]:
+            data[chat_id]["custom_ping_triggers"] = {}
+            
+        # trigger always stored in lower case
+        trigger = trigger.lower()
+        
+        data[chat_id]["custom_ping_triggers"][trigger] = start_type
+        self.db.save(data)
+        return True
+
+    def remove_custom_ping_trigger(self, chat_id: str, trigger: str) -> bool:
+        """Видаляє кастомний тригер"""
+        data = self.db.load()
+        trigger = trigger.lower()
+        
+        if chat_id in data and "custom_ping_triggers" in data[chat_id]:
+            if trigger in data[chat_id]["custom_ping_triggers"]:
+                del data[chat_id]["custom_ping_triggers"][trigger]
+                self.db.save(data)
+                return True
+        return False
+
+    def get_custom_ping_triggers(self, chat_id: str) -> Dict[str, str]:
+        """Повертає всі кастомні тригери чату {trigger: type}"""
+        chat_data = self.get_chat_data(chat_id)
+        return chat_data.get("custom_ping_triggers", {})
+    
+    # === Global Custom Triggers ===
+    
+    def add_global_ping_trigger(self, trigger: str, start_type: str = "text") -> None:
+        """Додає глобальний тригер"""
+        data = self.db.load()
+        if "global_ping_triggers" not in data:
+            data["global_ping_triggers"] = {}
+            
+        trigger = trigger.lower()
+        data["global_ping_triggers"][trigger] = start_type
+        self.db.save(data)
+
+    def remove_global_ping_trigger(self, trigger: str) -> bool:
+        """Видаляє глобальний тригер"""
+        data = self.db.load()
+        trigger = trigger.lower()
+        
+        if "global_ping_triggers" in data and trigger in data["global_ping_triggers"]:
+            del data["global_ping_triggers"][trigger]
+            self.db.save(data)
+            return True
+        return False
+
+    def get_global_ping_triggers(self) -> Dict[str, str]:
+        """Повертає глобальні тригери"""
+        data = self.db.load()
+        return data.get("global_ping_triggers", {})
 
 
 

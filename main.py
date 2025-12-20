@@ -7,6 +7,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram import F
+from aiogram.types import BotCommand, BotCommandScopeDefault
 
 # Version
 from __version__ import __version__
@@ -107,24 +108,82 @@ class PingBot:
         # Порядок важливий! Специфічні хендлери мають бути першими
         self.dp.include_router(self.admin_handler.get_router())
         self.logger.info("✓ Admin router registered")
-        
-        self.dp.include_router(self.ping_handler.get_router())
-        self.logger.info("✓ Ping router registered")
-        
-        self.dp.include_router(self.user_handler.get_router())
-        self.logger.info("✓ User router registered")
-        
+
         self.dp.include_router(self.payment_handler.get_router())
         self.logger.info("✓ Payment router registered")
         
         self.dp.include_router(self.settings_handler.get_router())
         self.logger.info("✓ Settings router registered")
+        
+        self.dp.include_router(self.user_handler.get_router())
+        self.logger.info("✓ User router registered")
+        
+        # PingHandler реєструємо останнім, бо він має catch-all хендлер
+        self.dp.include_router(self.ping_handler.get_router())
+        self.logger.info("✓ Ping router registered")
+
+    async def _setup_commands(self):
+        """Встановлює команди бота для меню"""
+        commands = [
+            BotCommand(command="all", description="📢 Викликати всіх"),
+            BotCommand(command="stop", description="🛑 Зупинити виклик"),
+            BotCommand(command="settings", description="⚙️ Налаштування"),
+            BotCommand(command="stats", description="📊 Статистика"),
+            BotCommand(command="sync", description="🔄 Оновити базу"),
+            BotCommand(command="help", description="ℹ️ Довідка"),
+            BotCommand(command="premium", description="👑 Premium меню"),
+            BotCommand(command="emoji", description="🤪 Виклик емодзі"),
+            BotCommand(command="admins", description="👮 Виклик адмінів"),
+            BotCommand(command="anybody", description="🎲 Випадковий юзер")
+        ]
+        
+        try:
+            await self.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+            self.logger.info("✓ Bot commands registered")
+        except Exception as e:
+            self.logger.error(f"Failed to register commands: {e}")
+    
+    async def _handle_pending_updates(self):
+        """Обробляє накопичені повідомлення після перезапуску"""
+        try:
+            # Отримуємо pending updates
+            updates = await self.bot.get_updates(offset=-1, limit=1)
+            
+            if updates:
+                last_update = updates[0]
+                
+                # Якщо є повідомлення - відповідаємо на останнє
+                if last_update.message:
+                    try:
+                        await self.bot.send_message(
+                            last_update.message.chat.id,
+                            "🔄 <b>Бот перезапущено!</b>\n\n"
+                            "Якщо ви надсилали команди поки бот був офлайн — будь ласка, повторіть їх.",
+                            parse_mode="HTML",
+                            reply_to_message_id=last_update.message.message_id
+                        )
+                        self.logger.info(f"Sent restart notification to chat {last_update.message.chat.id}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send restart notification: {e}")
+                
+                # Пропускаємо всі старі updates
+                await self.bot.get_updates(offset=last_update.update_id + 1)
+                self.logger.info("Skipped pending updates after restart")
+                
+        except Exception as e:
+            self.logger.warning(f"Error handling pending updates: {e}")
     
     async def start(self):
         """Запускає бота"""
         try:
             # Запускаємо userbot
             await self.userbot.start()
+            
+            # Реєструємо команди
+            await self._setup_commands()
+            
+            # Обробляємо накопичені повідомлення
+            await self._handle_pending_updates()
             
             self.logger.info("=" * 50)
             self.logger.info(f"🚀 TELEGRAM PING BOT v{__version__}")

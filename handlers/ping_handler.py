@@ -59,13 +59,25 @@ class PingHandler(BaseHandler):
         self.router.message(F.text.regexp(r'^!deluser\s+(\S+)', flags=0))(self.cmd_del_user_from_trigger)
         
         # Self-Service Roles v1.3.0
+        # 1. Custom Triggers Management (Specific Commands)
+        self.router.message(F.text.startswith("!addtrigger"))(self.cmd_add_custom_trigger)
+        self.router.message(F.text.startswith("!addemojitrigger"))(self.cmd_add_custom_emoji_trigger)
+        self.router.message(F.text.startswith("!deltrigger"))(self.cmd_del_custom_trigger)
+        self.router.message(F.text == "!triggers")(self.cmd_list_custom_triggers)
+        
+        # 2. Specific System Commands
         self.router.message(F.text.regexp(r'^!roles_panel$', flags=0))(self.cmd_roles_panel)
         self.router.message(F.text.regexp(r'^!set_role_emoji\s+(\S+)\s+(.+)', flags=0))(self.cmd_set_role_emoji)
         self.router.callback_query(F.data.startswith("role_"))(self.callback_role_toggle)
         self.router.callback_query(F.data == "stop_ping")(self.callback_stop_ping)
         
-        # Виклик тригера (має бути останнім!)
+        # 3. Dynamic Triggers (Regex !word)
+        # This catches !croco (Groups) AND !custom (Aliases)
         self.router.message(F.text.regexp(r'^!(\w+)$', flags=0))(self.cmd_call_trigger)
+        
+        # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
+        # Should be LAST
+        self.router.message(F.text)(self.handle_custom_triggers)
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -111,8 +123,13 @@ class PingHandler(BaseHandler):
         clean_chat_id = get_clean_chat_id(chat_id)
         user_ids = list(users.keys())
         
+        # Логування для дебагу
+        old_flag = self.chat_repo.get_stop_flag(clean_chat_id)
+        self.logger.info(f"[DEBUG] Початок пінгування: stop_flag={old_flag}, users={len(user_ids)}")
+        
         # Скидаємо прапорець зупинки перед початком
         self.chat_repo.set_stop_flag(clean_chat_id, False)
+        self.logger.info(f"[DEBUG] Stop flag скинуто")
         
         # Отримуємо налаштування чату
         pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
@@ -192,7 +209,8 @@ class PingHandler(BaseHandler):
                         self.logger.warning(f"Не вдалося закріпити повідомлення: {e}")
                 
                 await asyncio.sleep(ping_delay)
-            except:
+            except Exception as e:
+                self.logger.error(f"Помилка при відправці чанку {i}: {e}")
                 continue
     
     async def cmd_all(self, message: Message):
@@ -612,6 +630,39 @@ class PingHandler(BaseHandler):
             return
         
         chat_id = get_clean_chat_id(message.chat.id)
+        
+        # 1. Перевірка на кастомний тригер (Alias для Ping All)
+        custom_triggers = self.chat_repo.get_custom_ping_triggers(chat_id)
+        type_ = custom_triggers.get(trigger_name.lower())
+        
+        if not type_:
+            # Check global
+            global_triggers = self.chat_repo.get_global_ping_triggers()
+            type_ = global_triggers.get(trigger_name.lower())
+            
+        if type_:
+            # Це аліас для пінгу всіх!
+            self.logger.info(f"Custom trigger (strict) '{trigger_name}' activated")
+            
+            # Для ! trigger без тексту використовуємо дефолтний
+            call_text = "📣 Увага!"
+            
+            users = self.chat_repo.get_active_users(chat_id)
+            if not users:
+                return
+                
+            try:
+                await message.delete()
+            except:
+                pass
+                
+            if type_ == "emoji":
+                await self._send_pings(message.chat.id, users, call_text, use_emoji=True)
+            else:
+                await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+            return
+
+        # 2. Перевірка на групу користувачів
         user_ids = self.chat_repo.get_trigger_users(chat_id, trigger_name)
         
         if not user_ids:
@@ -847,3 +898,122 @@ class PingHandler(BaseHandler):
             )
         except:
             pass
+
+    # === Custom Triggers Logic ===
+
+    async def cmd_add_custom_trigger(self, message: Message):
+        """Додає кастомний текстовий тригер"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addtrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0] # Беремо перше слово
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "text")
+        await message.answer(f"✅ Додано тригер виклику (текст): `{trigger}`", parse_mode="Markdown")
+
+    async def cmd_add_custom_emoji_trigger(self, message: Message):
+        """Додає кастомний емодзі тригер"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addemojitrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "emoji")
+        await message.answer(f"✅ Додано тригер виклику (емодзі): `{trigger}`", parse_mode="Markdown")
+
+    async def cmd_del_custom_trigger(self, message: Message):
+        """Видаляє кастомний тригер"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер для видалення", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        if self.chat_repo.remove_custom_ping_trigger(chat_id, trigger):
+            await message.answer(f"✅ Тригер `{trigger}` видалено", parse_mode="Markdown")
+        else:
+            await message.answer(f"❌ Тригер `{trigger}` не знайдено", parse_mode="Markdown")
+
+    async def cmd_list_custom_triggers(self, message: Message):
+        """Показує список кастомних тригерів"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        chat_id = get_clean_chat_id(message.chat.id)
+        triggers = self.chat_repo.get_custom_ping_triggers(chat_id)
+        
+        if not triggers:
+            await message.answer("📝 У чаті немає кастомних тригерів.")
+            return
+            
+        text = "📝 <b>Кастомні тригери:</b>\n\n"
+        for t, type_ in triggers.items():
+            icon = "📢" if type_ == "text" else "🤪"
+            text += f"• <code>{t}</code> ({icon})\n"
+            
+        await message.answer(text, parse_mode="HTML")
+
+    async def handle_custom_triggers(self, message: Message):
+        """Перевіряє чи повідомлення є кастомним тригером"""
+        if not message.text:
+            return
+            
+        # Get first word, lowercase, strip prefix
+        first_word = message.text.split()[0].lower()
+        cleaned_trigger = first_word.lstrip('!').lstrip('/')
+        
+        # Check privileges first (expensive check only if match found? No, better check triggers first since it's dict lookup)
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        # 1. Check Chat Triggers
+        triggers = self.chat_repo.get_custom_ping_triggers(chat_id)
+        found_type = triggers.get(cleaned_trigger)
+        
+        # 2. Check Global Triggers if not found
+        if not found_type:
+            global_triggers = self.chat_repo.get_global_ping_triggers()
+            found_type = global_triggers.get(cleaned_trigger)
+            
+        if found_type:
+            # Check Admin
+            if not await self._is_admin(message.chat.id, message.from_user.id):
+                return
+                
+            # Log
+            self.logger.info(f"Custom trigger '{cleaned_trigger}' activated by {message.from_user.id}")
+            
+            # Extract Call Text (everything after trigger)
+            parts = message.text.split(maxsplit=1)
+            call_text = parts[1] if len(parts) > 1 else ("📣 Увага!" if found_type == "text" else "📣 Увага!")
+            
+            # Execute Ping
+            users = self.chat_repo.get_active_users(chat_id)
+            if not users:
+                return
+                
+            try:
+                await message.delete()
+            except:
+                pass
+                
+            if found_type == "emoji":
+                await self._send_pings(message.chat.id, users, call_text, use_emoji=True)
+            else:
+                await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
