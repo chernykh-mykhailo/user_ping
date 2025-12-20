@@ -1,16 +1,20 @@
 """
-Core package initialization
+Core package - Database layer
 """
 from .database import (
     IDatabase,
     JSONDatabase,
     ChatRepository,
-    PremiumRepository
+    PremiumRepository,
+    ChatPremiumRepository,
+    ReferralRepository
 )
 
 __all__ = [
     'IDatabase',
     'JSONDatabase',
     'ChatRepository',
-    'PremiumRepository'
+    'PremiumRepository',
+    'ChatPremiumRepository',
+    'ReferralRepository'
 ]

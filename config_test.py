@@ -1,36 +1,30 @@
 """
-Конфігурація бота - ПРИКЛАД
-Скопіюйте цей файл як config.py і заповніть своїми даними
+Конфігурація ТЕСТОВОГО бота
 """
 from dataclasses import dataclass
 
 # === API CREDENTIALS ===
-# Отримайте на https://my.telegram.org
-API_ID = 12345678 # Зміни це
-API_HASH = 'your_api_hash_here' # Зміни це
-SESSION_NAME = 'account_session'
+API_ID = 38862642
+API_HASH = 'f0d13bbdc1c2b5c07521c24570f0f7cb'
+SESSION_NAME = 'account2_session'
 
-# Отримайте від @BotFather
-BOT_TOKEN = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" # Зміни це
-
-# Отримайте від @BotFather -> Payments -> Telegram Stars
-# Для тестування використовуйте тестовий токен
-PAYMENT_TOKEN = "1234567890:TEST:your_test_token_here" # Зміни це
+# ТЕСТОВИЙ БОТ
+BOT_TOKEN = "8592617001:AAFLLw59qBmRrvAwOe5JZaWWRwBbGf3Q5cs"
+PAYMENT_TOKEN = "2051251535:TEST:OTk5MDA4ODgxLTAwNQ"  # RedSysTest
 
 # === ADMIN ===
-# Ваш Telegram User ID (отримайте від @userinfobot)
-ADMIN_USER_ID = 123456789 # Зміни це
+ADMIN_USER_ID = 831190060
 
 # === CONTACTS ===
-FEEDBACK_BOT = "@your_feedback_bot" 
-PROJECTS_CHANNEL = "https://t.me/your_channel"
+FEEDBACK_BOT = "@feedback_myshko_bot"
+PROJECTS_CHANNEL = "https://t.me/+BZEIOiPj3so1NzU6"
 
 # === FILES ===
-DB_FILE = "users_data.json"
+DB_FILE = "users_data_test.json"  # Окрема база для тесту!
 
 # === PING SETTINGS ===
-CHUNK_SIZE = 5  # Кількість людей в одному повідомленні
-PING_DELAY = 1.5  # Пауза між повідомленнями (секунди)
+CHUNK_SIZE = 5
+PING_DELAY = 1.5
 
 # === EMOJIS ===
 EMOJIS = [

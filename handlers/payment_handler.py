@@ -6,7 +6,7 @@ from aiogram import F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, LabeledPrice, PreCheckoutQuery
 from .base_handler import BaseHandler
-from config import PAYMENT_TOKEN, PREMIUM_PLANS, ADMIN_USER_ID
+from config import PAYMENT_TOKEN, PREMIUM_PLANS, CHAT_PREMIUM_PLANS, GIFT_PLANS, ADMIN_USER_ID, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM
 
 
 class PaymentHandler(BaseHandler):
@@ -15,9 +15,11 @@ class PaymentHandler(BaseHandler):
     Single Responsibility: тільки платежі
     """
     
-    def __init__(self, chat_repo, premium_repo, bot: Bot, userbot=None):
+    def __init__(self, chat_repo, premium_repo, chat_premium_repo, referral_repo, bot: Bot, userbot=None):
         self.bot = bot
         self.userbot = userbot
+        self.chat_premium_repo = chat_premium_repo
+        self.referral_repo = referral_repo
         self.logger = logging.getLogger(__name__)
         super().__init__(chat_repo, premium_repo)
     
@@ -34,6 +36,19 @@ class PaymentHandler(BaseHandler):
         self.router.message(Command("admin_payments"))(self.cmd_admin_payments)
         self.router.message(Command("admin_grant_premium"))(self.cmd_admin_grant_premium)
         self.router.message(Command("admin_revoke_premium"))(self.cmd_admin_revoke_premium)
+        
+        # v1.5.0 - Chat Premium
+        self.router.message(Command("chat_premium"))(self.cmd_chat_premium)
+        self.router.message(Command("buy_chat_month"))(self.cmd_buy_chat_month)
+        self.router.message(Command("buy_chat_year"))(self.cmd_buy_chat_year)
+        
+        # v1.5.0 - Gift Premium
+        self.router.message(Command("gift_premium"))(self.cmd_gift_premium)
+        self.router.message(Command("send_gift_week"))(self.cmd_send_gift_week)
+        self.router.message(Command("send_gift_month"))(self.cmd_send_gift_month)
+        
+        # v1.5.0 - Referral System
+        self.router.message(Command("referral"))(self.cmd_referral)
         
         self.router.pre_checkout_query()(self.process_pre_checkout)
         self.router.message(F.successful_payment)(self.process_successful_payment)
@@ -64,7 +79,7 @@ class PaymentHandler(BaseHandler):
         await self.bot.send_invoice(
             chat_id=message.chat.id,
             title=f"Premium на {plan.name.lower()}",
-            description=f"Доступ до /superunreg та інших Premium функцій на {plan.duration_days} днів",
+            description=f"Доступ до /superunreg та інших Premium функцій на {plan.days} днів",
             payload="premium_month",
             provider_token=PAYMENT_TOKEN,
             currency="XTR",
@@ -78,7 +93,7 @@ class PaymentHandler(BaseHandler):
         await self.bot.send_invoice(
             chat_id=message.chat.id,
             title=f"Premium на {plan.name.lower()}",
-            description=f"Доступ до /superunreg та інших Premium функцій на {plan.duration_days} днів (знижка 17%)",
+            description=f"Доступ до /superunreg та інших Premium функцій на {plan.days} днів (знижка 17%)",
             payload="premium_year",
             provider_token=PAYMENT_TOKEN,
             currency="XTR",
@@ -106,7 +121,7 @@ class PaymentHandler(BaseHandler):
         self.premium_repo.save_payment(user_id, charge_id, plan.price)
         
         # Надаємо преміум
-        expiry = self.premium_repo.grant_premium(user_id, plan.duration_days)
+        expiry = self.premium_repo.grant_premium(user_id, plan.days)
         
         success_text = (
             "✅ <b>Оплата успішна!</b>\n\n"
@@ -589,4 +604,240 @@ class PaymentHandler(BaseHandler):
                 
         except Exception as e:
             await message.answer(f"❌ Помилка: {e}")
+    
+    # === v1.5.0 - Chat Premium ===
+    
+    async def cmd_chat_premium(self, message: Message):
+        """Показує інформацію про Chat Premium"""
+        from utils.helpers import get_clean_chat_id
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        # Перевіряємо чи є Chat Premium
+        if self.chat_premium_repo.has_chat_premium(chat_id):
+            expiry = self.chat_premium_repo.get_chat_premium_expiry(chat_id)
+            from datetime import datetime
+            days_left = (expiry - datetime.now()).days
+            
+            premium_text = (
+                "💎 <b>Chat Premium активний!</b>\n\n"
+                f"✅ Діє до: {expiry.strftime('%d.%m.%Y')}\n"
+                f"⏳ Залишилось днів: {days_left}\n\n"
+                "<b>Переваги:</b>\n"
+                "• 🎯 Безліміт тригерів\n"
+                "• 📊 Розширена статистика\n"
+                "• ⚙️ Додаткові налаштування\n"
+                "• 👥 Доступ для всіх адмінів\n\n"
+                "Продовжити: /buy_chat_month або /buy_chat_year"
+            )
+        else:
+            premium_text = (
+                "💎 <b>Chat Premium</b>\n\n"
+                "<b>Переваги для всього чату:</b>\n"
+                "• 🎯 Безліміт тригерів викликів\n"
+                "• 📊 Розширена статистика\n"
+                "• ⚙️ Додаткові налаштування\n"
+                "• 👥 Доступ для всіх адмінів\n\n"
+                "<b>Ціни:</b>\n"
+                f"⭐ Місяць: {CHAT_PREMIUM_PLANS['month'].price} Stars\n"
+                f"⭐ Рік: {CHAT_PREMIUM_PLANS['year'].price} Stars\n\n"
+                "<b>Купити:</b>\n"
+                "• /buy_chat_month — місяць\n"
+                "• /buy_chat_year — рік"
+            )
+        
+        await message.answer(premium_text, parse_mode="HTML")
+    
+    async def cmd_buy_chat_month(self, message: Message):
+        """Купує Chat Premium на місяць"""
+        await self._send_chat_premium_invoice(message, "month")
+    
+    async def cmd_buy_chat_year(self, message: Message):
+        """Купує Chat Premium на рік"""
+        await self._send_chat_premium_invoice(message, "year")
+    
+    async def _send_chat_premium_invoice(self, message: Message, plan_type: str):
+        """Відправляє інвойс для Chat Premium"""
+        plan = CHAT_PREMIUM_PLANS[plan_type]
+        
+        await message.answer_invoice(
+            title=plan.name,
+            description=f"Chat Premium на {plan.days} днів для всього чату",
+            payload=f"chat_premium_{plan_type}",
+            currency="XTR",
+            prices=[LabeledPrice(label=plan.name, amount=plan.price)],
+            provider_token=""
+        )
+    
+    # === v1.5.0 - Gift Premium ===
+    
+    async def cmd_gift_premium(self, message: Message):
+        """Показує інформацію про подарунок Premium"""
+        gift_text = (
+            "🎁 <b>Подарунок Premium</b>\n\n"
+            "Подаруйте Premium своєму другу зі знижкою!\n\n"
+            "<b>🔥 Спеціальна ціна:</b>\n"
+            f"⭐ 7 днів: {GIFT_PLANS['week'].price} Stars <s>8 Stars</s> (-25%)\n"
+            f"⭐ 30 днів: {GIFT_PLANS['month'].price} Stars <s>20 Stars</s> (-20%)\n\n"
+            "<b>Як подарувати:</b>\n"
+            "1. Оберіть період:\n"
+            "   • /send_gift_week — 7 днів\n"
+            "   • /send_gift_month — 30 днів\n"
+            "2. Відповідайте на повідомлення друга\n"
+            "3. Оплатіть подарунок\n"
+            "4. Друг отримає Premium!\n\n"
+            "<i>💡 Ідеально для подарунка на день народження!</i>"
+        )
+        
+        await message.answer(gift_text, parse_mode="HTML")
+    
+    async def cmd_send_gift_week(self, message: Message):
+        """Відправляє подарунок на 7 днів"""
+        await self._send_gift_invoice(message, "week")
+    
+    async def cmd_send_gift_month(self, message: Message):
+        """Відправляє подарунок на 30 днів"""
+        await self._send_gift_invoice(message, "month")
+    
+    async def _send_gift_invoice(self, message: Message, plan_type: str):
+        """Відправляє інвойс для подарунка"""
+        if not message.reply_to_message:
+            await message.answer(
+                "❌ Використовуйте цю команду у відповідь на повідомлення користувача, "
+                "якому хочете подарувати Premium"
+            )
+            return
+        
+        recipient_id = str(message.reply_to_message.from_user.id)
+        recipient_name = message.reply_to_message.from_user.first_name
+        
+        plan = GIFT_PLANS[plan_type]
+        
+        await message.answer_invoice(
+            title=f"🎁 Подарунок для {recipient_name}",
+            description=f"Premium на {plan.days} днів",
+            payload=f"gift_{plan_type}_{recipient_id}",
+            currency="XTR",
+            prices=[LabeledPrice(label=plan.name, amount=plan.price)],
+            provider_token=""
+        )
+    
+    # === v1.5.0 - Referral System ===
+    
+    async def cmd_referral(self, message: Message):
+        """Показує реферальну статистику"""
+        user_id = str(message.from_user.id)
+        
+        # Отримуємо статистику
+        stats = self.referral_repo.get_referral_stats(user_id)
+        referral_code = stats["referral_code"]
+        
+        # Генеруємо реферальне посилання
+        bot_username = (await self.bot.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start={referral_code}"
+        
+        referral_text = (
+            "🔗 <b>Реферальна програма</b>\n\n"
+            f"<b>Ваше посилання:</b>\n"
+            f"<code>{referral_link}</code>\n\n"
+            f"<b>Статистика:</b>\n"
+            f"👥 Запрошено друзів: {stats['total_referrals']}\n"
+            f"💎 З них купили Premium: {stats['premium_referrals']}\n"
+            f"🎁 Отримано бонусів: {stats['total_bonus_days']} днів\n\n"
+            f"<b>Бонуси:</b>\n"
+            f"• +{REFERRAL_BONUS_SIGNUP} днів за кожного друга\n"
+            f"• +{REFERRAL_BONUS_PREMIUM} днів якщо друг купить Premium\n\n"
+            f"<i>💡 Поділіться посиланням з друзями!</i>"
+        )
+        
+        await message.answer(referral_text, parse_mode="HTML")
+    
+    async def process_successful_payment(self, message: Message):
+        """Обробляє успішний платіж"""
+        payment = message.successful_payment
+        user_id = str(message.from_user.id)
+        
+        # Зберігаємо інформацію про платіж
+        self.premium_repo.save_payment(
+            user_id,
+            payment.telegram_payment_charge_id,
+            payment.total_amount
+        )
+        
+        # Обробляємо різні типи платежів
+        payload = payment.invoice_payload
+        
+        if payload.startswith("chat_premium_"):
+            # Chat Premium
+            plan_type = payload.replace("chat_premium_", "")
+            plan = CHAT_PREMIUM_PLANS[plan_type]
+            
+            from utils.helpers import get_clean_chat_id
+            chat_id = get_clean_chat_id(message.chat.id)
+            
+            expiry = self.chat_premium_repo.purchase_chat_premium(chat_id, user_id, plan.days)
+            
+            await message.answer(
+                f"✅ <b>Chat Premium активовано!</b>\n\n"
+                f"💎 Період: {plan.name}\n"
+                f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                f"<i>Всі адміни тепер мають доступ до Premium функцій!</i>",
+                parse_mode="HTML"
+            )
+            
+            self.logger.info(f"Chat Premium purchased for chat {chat_id} by user {user_id}")
+        
+        elif payload.startswith("gift_"):
+            # Gift Premium
+            parts = payload.split("_")
+            plan_type = parts[1]
+            recipient_id = parts[2]
+            
+            plan = GIFT_PLANS[plan_type]
+            expiry = self.premium_repo.grant_premium(recipient_id, plan.days)
+            
+            # Повідомляємо відправника
+            await message.answer(
+                f"✅ <b>Подарунок відправлено!</b>\n\n"
+                f"🎁 Premium на {plan.days} днів\n"
+                f"👤 Отримувач отримав повідомлення\n\n"
+                f"<i>Дякуємо за щедрість! 💝</i>",
+                parse_mode="HTML"
+            )
+            
+            # Повідомляємо отримувача
+            try:
+                sender_name = message.from_user.first_name
+                await self.bot.send_message(
+                    int(recipient_id),
+                    f"🎁 <b>Ви отримали подарунок!</b>\n\n"
+                    f"👤 Від: {sender_name}\n"
+                    f"💎 Premium на {plan.days} днів\n"
+                    f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                    f"<i>Тепер ви можете використовувати /superunreg!</i>",
+                    parse_mode="HTML"
+                )
+                self.logger.info(f"Gift sent from {user_id} to {recipient_id}")
+            except Exception as e:
+                self.logger.warning(f"Failed to notify gift recipient {recipient_id}: {e}")
+        
+        elif payload.startswith("premium_"):
+            # Personal Premium
+            plan_type = payload.replace("premium_", "")
+            plan = PREMIUM_PLANS[plan_type]
+            
+            expiry = self.premium_repo.grant_premium(user_id, plan.days)
+            
+            # Перевіряємо чи це реферал
+            # (реферальний бонус буде нараховано при першому старті через /start ref_xxx)
+            
+            await message.answer(
+                f"✅ <b>Premium активовано!</b>\n\n"
+                f"💎 Період: {plan.name}\n"
+                f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                f"<i>Тепер ви можете використовувати /superunreg</i>",
+                parse_mode="HTML"
+            )
+            
+            self.logger.info(f"Premium purchased by user {user_id}")
 

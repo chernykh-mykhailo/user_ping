@@ -9,6 +9,7 @@ from aiogram.types import Message
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from userbot.collector import UserbotCollector
+from config import ADMIN_USER_ID, PING_LIMITS
 
 
 class AdminHandler(BaseHandler):
@@ -30,6 +31,8 @@ class AdminHandler(BaseHandler):
         
         self.router.message(Command("stats"))(self.cmd_stats)
         self.router.message(F.text.regexp(r'^!?стата', flags=0))(self.cmd_stats)
+        
+        self.router.message(Command("admin_settings"))(self.cmd_admin_settings)
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -102,3 +105,32 @@ class AdminHandler(BaseHandler):
         
         await message.answer(stats_text, parse_mode="HTML")
         self.logger.info(f"Відправлено статистику: {stats['total']} осіб")
+
+    async def cmd_admin_settings(self, message: Message):
+        """Встановлює глобальні налаштування (тільки власник)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 3:
+            current_delay = self.chat_repo.get_global_setting("ping_delay", PING_LIMITS["default_delay"])
+            await message.answer(
+                f"⚙️ <b>Global Settings</b>\n\n"
+                f"Current Global Delay: {current_delay}s\n\n"
+                f"Usage: /admin_settings set_delay 0.5"
+            )
+            return
+            
+        action = args[1]
+        value = args[2]
+        
+        if action == "set_delay":
+            try:
+                delay = float(value)
+                if delay < PING_LIMITS["min_delay"]: delay = PING_LIMITS["min_delay"]
+                if delay > PING_LIMITS["max_delay"]: delay = PING_LIMITS["max_delay"]
+                
+                self.chat_repo.set_global_setting("ping_delay", delay)
+                await message.answer(f"✅ Global Delay set to {delay}s")
+            except ValueError:
+                await message.answer("❌ Invalid number")

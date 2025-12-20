@@ -18,7 +18,7 @@ from config import (
 )
 
 # Core components
-from core import JSONDatabase, ChatRepository, PremiumRepository
+from core import JSONDatabase, ChatRepository, PremiumRepository, ChatPremiumRepository, ReferralRepository
 
 # Userbot
 from userbot import UserbotCollector
@@ -28,7 +28,8 @@ from handlers import (
     AdminHandler,
     PingHandler,
     UserHandler,
-    PaymentHandler
+    PaymentHandler,
+    SettingsHandler
 )
 
 
@@ -50,6 +51,8 @@ class PingBot:
         self.db = JSONDatabase(DB_FILE)
         self.chat_repo = ChatRepository(self.db)
         self.premium_repo = PremiumRepository(self.db)
+        self.chat_premium_repo = ChatPremiumRepository(self.db)
+        self.referral_repo = ReferralRepository(self.db)
         
         # Bot та Dispatcher
         self.bot = Bot(token=BOT_TOKEN)
@@ -85,8 +88,15 @@ class PingBot:
         self.payment_handler = PaymentHandler(
             self.chat_repo,
             self.premium_repo,
+            self.chat_premium_repo,
+            self.referral_repo,
             self.bot,
             self.userbot
+        )
+        
+        self.settings_handler = SettingsHandler(
+            self.chat_repo,
+            self.premium_repo
         )
         
         # Реєстрація роутерів
@@ -106,6 +116,9 @@ class PingBot:
         
         self.dp.include_router(self.payment_handler.get_router())
         self.logger.info("✓ Payment router registered")
+        
+        self.dp.include_router(self.settings_handler.get_router())
+        self.logger.info("✓ Settings router registered")
     
     async def start(self):
         """Запускає бота"""

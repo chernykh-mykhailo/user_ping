@@ -9,7 +9,10 @@ from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
-from config import CHUNK_SIZE, PING_DELAY, EMOJIS
+from .base_handler import BaseHandler
+from utils.helpers import get_clean_chat_id
+from config import PING_LIMITS, EMOJIS
+from aiogram.exceptions import TelegramBadRequest
 
 
 class PingHandler(BaseHandler):
@@ -59,6 +62,7 @@ class PingHandler(BaseHandler):
         self.router.message(F.text.regexp(r'^!roles_panel$', flags=0))(self.cmd_roles_panel)
         self.router.message(F.text.regexp(r'^!set_role_emoji\s+(\S+)\s+(.+)', flags=0))(self.cmd_set_role_emoji)
         self.router.callback_query(F.data.startswith("role_"))(self.callback_role_toggle)
+        self.router.callback_query(F.data == "stop_ping")(self.callback_stop_ping)
         
         # Виклик тригера (має бути останнім!)
         self.router.message(F.text.regexp(r'^!(\w+)$', flags=0))(self.cmd_call_trigger)
@@ -110,7 +114,28 @@ class PingHandler(BaseHandler):
         # Скидаємо прапорець зупинки перед початком
         self.chat_repo.set_stop_flag(clean_chat_id, False)
         
-        for i in range(0, len(user_ids), CHUNK_SIZE):
+        # Отримуємо налаштування чату
+        pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
+        first_msg_stop = self.chat_repo.get_setting(clean_chat_id, "first_msg_stop", True)
+        
+        # Динамічні налаштування з урахуванням лімітів
+        ping_delay = self.chat_repo.get_setting(clean_chat_id, "ping_delay", PING_LIMITS["default_delay"])
+        chunk_size = self.chat_repo.get_setting(clean_chat_id, "chunk_size", PING_LIMITS["default_chunk"])
+        
+        # Перевірка глобальних налаштувань (Global Override)
+        global_delay = self.chat_repo.get_global_setting("ping_delay")
+        if global_delay:
+            ping_delay = global_delay
+            
+        # Hard Limits Safety Check
+        if ping_delay < PING_LIMITS["min_delay"]: ping_delay = PING_LIMITS["min_delay"]
+        if ping_delay > PING_LIMITS["max_delay"]: ping_delay = PING_LIMITS["max_delay"]
+        if chunk_size < PING_LIMITS["min_chunk"]: chunk_size = PING_LIMITS["min_chunk"]
+        if chunk_size > PING_LIMITS["max_chunk"]: chunk_size = PING_LIMITS["max_chunk"]
+        
+        chunk_size = int(chunk_size)
+        
+        for i in range(0, len(user_ids), chunk_size):
             # Перевіряємо прапорець зупинки
             if self.chat_repo.get_stop_flag(clean_chat_id):
                 self.logger.info(f"Виклик зупинено в чаті {clean_chat_id}")
@@ -124,7 +149,7 @@ class PingHandler(BaseHandler):
                     pass
                 break
             
-            chunk = user_ids[i:i + CHUNK_SIZE]
+            chunk = user_ids[i:i + chunk_size]
             mentions = []
             
             for uid in chunk:
@@ -136,12 +161,37 @@ class PingHandler(BaseHandler):
                 mentions.append(f'<a href="tg://user?id={uid}">{label}</a>')
             
             try:
-                await self.bot.send_message(
+                # Визначаємо чи потрібна кнопка стоп
+                is_first_chunk = (i == 0)
+                add_stop_button = True
+                
+                if first_msg_stop and not is_first_chunk:
+                    add_stop_button = False
+                
+                keyboard = None
+                footer_text = ""
+                
+                if add_stop_button:
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="🛑 Стоп", callback_data="stop_ping")
+                    ]])
+                    footer_text = "\n\n(стоп - зупинити)"
+                
+                sent_message = await self.bot.send_message(
                     chat_id,
-                    f"<b>{call_text}</b>\n\n" + " ".join(mentions),
-                    parse_mode="HTML"
+                    f"<b>{call_text}</b>\n\n" + " ".join(mentions) + footer_text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
                 )
-                await asyncio.sleep(PING_DELAY)
+                
+                # Закріплюємо перше повідомлення
+                if is_first_chunk and pin_enabled:
+                    try:
+                        await self.bot.pin_chat_message(chat_id, sent_message.message_id)
+                    except Exception as e:
+                        self.logger.warning(f"Не вдалося закріпити повідомлення: {e}")
+                
+                await asyncio.sleep(ping_delay)
             except:
                 continue
     
@@ -699,18 +749,24 @@ class PingHandler(BaseHandler):
             # Видаляємо
             self.chat_repo.remove_user_from_trigger(chat_id, trigger_name, user_id)
             emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name)
-            await callback.answer(
-                f"❌ Ви вийшли з {emoji} {trigger_name}",
-                show_alert=False
-            )
+            try:
+                await callback.answer(
+                    f"❌ Ви вийшли з {emoji} {trigger_name}",
+                    show_alert=False
+                )
+            except TelegramBadRequest:
+                pass
         else:
             # Додаємо
             self.chat_repo.add_user_to_trigger(chat_id, trigger_name, user_id)
             emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name)
-            await callback.answer(
-                f"✅ Ви зареєструвались на {emoji} {trigger_name}!",
-                show_alert=False
-            )
+            try:
+                await callback.answer(
+                    f"✅ Ви зареєструвались на {emoji} {trigger_name}!",
+                    show_alert=False
+                )
+            except TelegramBadRequest:
+                pass
         
         # Оновлюємо панель з поточним статусом
         await self._update_roles_panel(callback.message, chat_id, user_id)
@@ -755,5 +811,39 @@ class PingHandler(BaseHandler):
         
         try:
             await message.edit_text(panel_text, reply_markup=keyboard, parse_mode="HTML")
+        except:
+            pass
+
+    async def callback_stop_ping(self, callback: CallbackQuery):
+        """Обробляє натискання кнопки стоп"""
+        if not await self._is_admin(callback.message.chat.id, callback.from_user.id):
+            try:
+                await callback.answer("❌ Тільки адміни можуть зупиняти виклик", show_alert=True)
+            except TelegramBadRequest:
+                pass
+            return
+
+        chat_id = get_clean_chat_id(callback.message.chat.id)
+        self.chat_repo.set_stop_flag(chat_id, True)
+        
+        # Отримуємо налаштування для звіту
+        admin_stop_report = self.chat_repo.get_setting(chat_id, "admin_stop_report", True)
+        stop_text = "\n\n🛑 <b>Зупинено користувачем</b>"
+        
+        if admin_stop_report:
+            admin_name = callback.from_user.first_name
+            stop_text = f"\n\n🛑 <b>Зупинено адміном: {admin_name}</b>"
+        
+        try:
+            await callback.answer("✅ Зупиняємо виклик...")
+        except TelegramBadRequest:
+            pass
+            
+        try:
+            await callback.message.edit_text(
+                callback.message.text + stop_text,
+                parse_mode="HTML",
+                reply_markup=None
+            )
         except:
             pass

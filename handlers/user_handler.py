@@ -7,8 +7,9 @@ from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
-from config import PREMIUM_PLANS, FEEDBACK_BOT, PROJECTS_CHANNEL
+from config import PREMIUM_PLANS, CHAT_PREMIUM_PLANS, FEEDBACK_BOT, PROJECTS_CHANNEL, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM
 from __version__ import __version__
+from aiogram.exceptions import TelegramBadRequest
 
 
 class UserHandler(BaseHandler):
@@ -24,7 +25,8 @@ class UserHandler(BaseHandler):
     def register_handlers(self):
         """Реєструє хендлери користувачів"""
         # Help
-        self.router.message(Command("help", "start"))(self.cmd_help)
+        self.router.message(Command("help"))(self.cmd_help)
+        self.router.message(Command("start"))(self.cmd_start)  # Окремо для реферальних посилань
         self.router.message(F.text.regexp(r'^!?(хелп|допомога)', flags=0))(self.cmd_help)
         self.router.callback_query(F.data.startswith("help_"))(self.callback_help_section)
         
@@ -43,6 +45,68 @@ class UserHandler(BaseHandler):
         
         # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
+    
+    async def cmd_start(self, message: Message):
+        """Обробляє /start з реферальними посиланнями"""
+        from config import REFERRAL_BONUS_SIGNUP
+        
+        # Перевіряємо чи є реферальний код
+        args = message.text.split()
+        if len(args) > 1 and args[1].startswith("ref_"):
+            referrer_id = args[1].replace("ref_", "")
+            referred_id = str(message.from_user.id)
+            
+            # Не можна реферити самого себе
+            if referrer_id == referred_id:
+                await self.cmd_help(message)
+                return
+            
+            # Відстежуємо реферала
+            from core import ReferralRepository
+            from core.database import JSONDatabase
+            from config import DB_FILE
+            
+            db = JSONDatabase(DB_FILE)
+            referral_repo = ReferralRepository(db)
+            
+            if referral_repo.track_referral(referrer_id, referred_id):
+                # Нараховуємо бонус рефереру
+                from core import PremiumRepository
+                premium_repo = PremiumRepository(db)
+                premium_repo.grant_premium(referrer_id, REFERRAL_BONUS_SIGNUP)
+                referral_repo.add_bonus_days(referrer_id, REFERRAL_BONUS_SIGNUP)
+                
+                # Повідомляємо нового користувача
+                await message.answer(
+                    f"🎉 <b>Вітаємо!</b>\n\n"
+                    f"Ви приєдналися за реферальним посиланням!\n"
+                    f"Ваш друг отримав +{REFERRAL_BONUS_SIGNUP} днів Premium 🎁\n\n"
+                    f"Купіть Premium і він отримає ще більше бонусів!\n"
+                    f"/premium",
+                    parse_mode="HTML"
+                )
+                
+                # Повідомляємо реферера
+                try:
+                    from aiogram import Bot
+                    from config import BOT_TOKEN
+                    bot = Bot(token=BOT_TOKEN)
+                    
+                    await bot.send_message(
+                        int(referrer_id),
+                        f"🎁 <b>Новий реферал!</b>\n\n"
+                        f"👤 {message.from_user.first_name} приєднався за вашим посиланням!\n"
+                        f"💎 Ви отримали +{REFERRAL_BONUS_SIGNUP} днів Premium\n\n"
+                        f"<i>Продовжуйте ділитися посиланням!</i>",
+                        parse_mode="HTML"
+                    )
+                except:
+                    pass
+                
+                return
+        
+        # Якщо немає реферального коду - показуємо help
+        await self.cmd_help(message)
     
     async def cmd_help(self, message: Message):
         """Показує головне меню довідки"""
@@ -205,20 +269,40 @@ class UserHandler(BaseHandler):
         elif section == "premium":
             text = (
                 f"<b>👑 Premium</b>\n\n"
-                f"<b>Переваги:</b>\n"
+                f"<b>Personal Premium:</b>\n"
                 f"• 🚫 /superunreg — Постійне вимкнення пінгів\n"
-                f"• 🎯 Доступ до всіх функцій\n\n"
-                f"<b>Ціни:</b>\n"
-                f"⭐ Місяць: {PREMIUM_PLANS['month'].price} Stars ({PREMIUM_PLANS['month'].days} днів)\n"
-                f"⭐ Рік: {PREMIUM_PLANS['year'].price} Stars ({PREMIUM_PLANS['year'].days} днів)\n\n"
+                f"• 🎯 Доступ до всіх функцій\n"
+                f"⭐ Місяць: {PREMIUM_PLANS['month'].price} Stars\n"
+                f"⭐ Рік: {PREMIUM_PLANS['year'].price} Stars\n\n"
+                f"<b>💎 Chat Premium:</b>\n"
+                f"• 🎯 Безліміт тригерів\n"
+                f"• 📊 Розширена статистика\n"
+                f"• 👥 Доступ для всіх адмінів\n"
+                f"⭐ Місяць: {CHAT_PREMIUM_PLANS['month'].price} Stars\n"
+                f"⭐ Рік: {CHAT_PREMIUM_PLANS['year'].price} Stars\n\n"
+                f"<b>🎁 Подарунок Premium:</b>\n"
+                f"• Подаруйте Premium друзям!\n"
+                f"• /gift_premium — інструкція\n\n"
+                f"<b>🔗 Реферальна програма:</b>\n"
+                f"• +{REFERRAL_BONUS_SIGNUP} днів за кожного друга\n"
+                f"• +{REFERRAL_BONUS_PREMIUM} днів якщо друг купить Premium\n"
+                f"• /referral — ваше посилання\n\n"
                 f"<b>Команди:</b>\n"
-                f"• /premium — Купити Premium\n"
-                f"• /balance — Перевірити статус\n"
-                f"• /refund — Повернення коштів"
+                f"• /premium — Personal Premium\n"
+                f"• /chat_premium — Chat Premium\n"
+                f"• /gift_premium — Подарунок\n"
+                f"• /referral — Реферали\n"
+                f"• /balance — Статус\n"
+                f"• /refund — Повернення"
             )
             await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
         
-        await callback.answer()
+        try:
+            await callback.answer()
+        except TelegramBadRequest:
+            pass
+        except Exception as e:
+            self.logger.warning(f"Error answering callback: {e}")
 
     
     async def cmd_feedback(self, message: Message):

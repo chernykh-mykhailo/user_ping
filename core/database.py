@@ -6,7 +6,8 @@ import json
 import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+import secrets
 
 
 class IDatabase(ABC):
@@ -303,7 +304,45 @@ class ChatRepository:
         """Повертає всі емодзі тригерів"""
         chat_data = self.get_chat_data(chat_id)
         return chat_data.get("trigger_emojis", {})
-
+    
+    # === Settings ===
+    
+    def get_setting(self, chat_id: str, key: str, default: any = None) -> any:
+        """Отримує налаштування чату"""
+        chat_data = self.get_chat_data(chat_id)
+        settings = chat_data.get("settings", {})
+        return settings.get(key, default)
+    
+    def set_setting(self, chat_id: str, key: str, value: any) -> None:
+        """Зберігає налаштування чату"""
+        data = self.db.load()
+        
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+            
+        if "settings" not in data[chat_id]:
+            data[chat_id]["settings"] = {}
+        
+        data[chat_id]["settings"][key] = value
+        self.db.save(data)
+    
+    # === Global Settings ===
+    
+    def get_global_setting(self, key: str, default: any = None) -> any:
+        """Отримує глобальне налаштування (для Owner)"""
+        data = self.db.load()
+        settings = data.get("global_settings", {})
+        return settings.get(key, default)
+    
+    def set_global_setting(self, key: str, value: any) -> None:
+        """Встановлює глобальне налаштування"""
+        data = self.db.load()
+        
+        if "global_settings" not in data:
+            data["global_settings"] = {}
+            
+        data["global_settings"][key] = value
+        self.db.save(data)
 
 
 
@@ -328,8 +367,6 @@ class PremiumRepository:
     
     def grant_premium(self, user_id: str, days: int) -> datetime:
         """Надає преміум на вказану кількість днів"""
-        from datetime import timedelta
-        
         data = self.db.load()
         
         if "premium_users" not in data:
@@ -431,3 +468,162 @@ class PremiumRepository:
         self.db.save(data)
         return True
 
+
+class ChatPremiumRepository:
+    """Repository для роботи з Chat Premium (v1.5.0)"""
+    
+    def __init__(self, db: IDatabase):
+        self.db = db
+    
+    def has_chat_premium(self, chat_id: str) -> bool:
+        """Перевіряє наявність активного Chat Premium"""
+        data = self.db.load()
+        
+        if "chat_premium" not in data:
+            return False
+        
+        if chat_id not in data["chat_premium"]:
+            return False
+        
+        expiry = datetime.fromisoformat(data["chat_premium"][chat_id]["expiry"])
+        return datetime.now() < expiry
+    
+    def purchase_chat_premium(self, chat_id: str, purchased_by: str, days: int) -> datetime:
+        """Купує Chat Premium для чату"""
+        data = self.db.load()
+        
+        if "chat_premium" not in data:
+            data["chat_premium"] = {}
+        
+        # Продовжуємо з поточної дати або з зараз
+        if chat_id in data["chat_premium"]:
+            current_expiry = datetime.fromisoformat(data["chat_premium"][chat_id]["expiry"])
+            if current_expiry > datetime.now():
+                new_expiry = current_expiry + timedelta(days=days)
+            else:
+                new_expiry = datetime.now() + timedelta(days=days)
+        else:
+            new_expiry = datetime.now() + timedelta(days=days)
+        
+        data["chat_premium"][chat_id] = {
+            "expiry": new_expiry.isoformat(),
+            "purchased_by": purchased_by,
+            "purchase_date": datetime.now().isoformat()
+        }
+        
+        self.db.save(data)
+        return new_expiry
+    
+    def get_chat_premium_expiry(self, chat_id: str) -> Optional[datetime]:
+        """Повертає дату закінчення Chat Premium"""
+        data = self.db.load()
+        
+        if "chat_premium" not in data or chat_id not in data["chat_premium"]:
+            return None
+        
+        return datetime.fromisoformat(data["chat_premium"][chat_id]["expiry"])
+    
+    def revoke_chat_premium(self, chat_id: str) -> bool:
+        """Відбирає Chat Premium у чату"""
+        data = self.db.load()
+        
+        if "chat_premium" not in data or chat_id not in data["chat_premium"]:
+            return False
+        
+        del data["chat_premium"][chat_id]
+        self.db.save(data)
+        return True
+
+
+class ReferralRepository:
+    """Repository для роботи з реферальною системою (v1.5.0)"""
+    
+    def __init__(self, db: IDatabase):
+        self.db = db
+    
+    def get_referral_code(self, user_id: str) -> str:
+        """Повертає реферальний код користувача"""
+        data = self.db.load()
+        
+        if "referrals" not in data:
+            data["referrals"] = {}
+        
+        if user_id not in data["referrals"]:
+            # Створюємо новий код
+            code = f"ref_{user_id}"
+            data["referrals"][user_id] = {
+                "referral_code": code,
+                "referred_users": [],
+                "total_bonus_days": 0,
+                "stats": {
+                    "total_referrals": 0,
+                    "premium_referrals": 0
+                }
+            }
+            self.db.save(data)
+        
+        return data["referrals"][user_id]["referral_code"]
+    
+    def track_referral(self, referrer_id: str, referred_id: str) -> bool:
+        """Відстежує реферала"""
+        data = self.db.load()
+        
+        if "referrals" not in data or referrer_id not in data["referrals"]:
+            return False
+        
+        # Перевіряємо чи вже є цей реферал
+        if referred_id in data["referrals"][referrer_id]["referred_users"]:
+            return False
+        
+        # Додаємо реферала
+        data["referrals"][referrer_id]["referred_users"].append(referred_id)
+        data["referrals"][referrer_id]["stats"]["total_referrals"] += 1
+        
+        self.db.save(data)
+        return True
+    
+    def mark_premium_referral(self, referrer_id: str, referred_id: str) -> bool:
+        """Позначає що реферал купив Premium"""
+        data = self.db.load()
+        
+        if "referrals" not in data or referrer_id not in data["referrals"]:
+            return False
+        
+        if referred_id not in data["referrals"][referrer_id]["referred_users"]:
+            return False
+        
+        data["referrals"][referrer_id]["stats"]["premium_referrals"] += 1
+        self.db.save(data)
+        return True
+    
+    def add_bonus_days(self, user_id: str, days: int) -> int:
+        """Додає бонусні дні користувачу"""
+        data = self.db.load()
+        
+        if "referrals" not in data or user_id not in data["referrals"]:
+            return 0
+        
+        data["referrals"][user_id]["total_bonus_days"] += days
+        self.db.save(data)
+        
+        return data["referrals"][user_id]["total_bonus_days"]
+    
+    def get_referral_stats(self, user_id: str) -> dict:
+        """Повертає статистику рефералів"""
+        data = self.db.load()
+        
+        if "referrals" not in data or user_id not in data["referrals"]:
+            return {
+                "total_referrals": 0,
+                "premium_referrals": 0,
+                "total_bonus_days": 0,
+                "referral_code": self.get_referral_code(user_id)
+            }
+        
+        ref_data = data["referrals"][user_id]
+        return {
+            "total_referrals": ref_data["stats"]["total_referrals"],
+            "premium_referrals": ref_data["stats"]["premium_referrals"],
+            "total_bonus_days": ref_data["total_bonus_days"],
+            "referral_code": ref_data["referral_code"]
+        }
