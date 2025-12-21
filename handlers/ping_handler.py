@@ -142,9 +142,10 @@ class PingHandler(BaseHandler):
         chunk_size = self.chat_repo.get_setting(clean_chat_id, "chunk_size", PING_LIMITS["default_chunk"])
         
         # Перевірка глобальних налаштувань (Global Override)
+        # Якщо в панелі /apanel стоїть затримка, вона стає МІНІМАЛЬНОЮ (для захисту від флуду)
         global_delay = self.chat_repo.get_global_setting("ping_delay")
-        if global_delay:
-            ping_delay = global_delay
+        if global_delay is not None:
+            ping_delay = max(ping_delay, global_delay)
             
         # Hard Limits Safety Check
         if ping_delay < PING_LIMITS["min_delay"]: ping_delay = PING_LIMITS["min_delay"]
@@ -153,6 +154,9 @@ class PingHandler(BaseHandler):
         if chunk_size > PING_LIMITS["max_chunk"]: chunk_size = PING_LIMITS["max_chunk"]
         
         chunk_size = int(chunk_size)
+        
+        # Список повідомлень з кнопкою стоп для видалення в кінці (v1.6.3)
+        stop_messages = []
         
         for i in range(0, len(user_ids), chunk_size):
             # Перевіряємо прапорець зупинки
@@ -198,8 +202,10 @@ class PingHandler(BaseHandler):
                     ]])
                     footer_text = "\n\n(стоп - зупинити)"
                 
-                # Додаємо к-сть якщо увімкнено
-                count_text = f" (👥 {len(user_ids)})" if show_count else ""
+                # Додаємо к-сть ТІЛЬКИ в перше повідомлення (v1.6.1)
+                count_text = ""
+                if is_first_chunk and show_count:
+                    count_text = f" (👥 {len(user_ids)})"
                 
                 sent_message = await self.bot.send_message(
                     chat_id,
@@ -209,8 +215,12 @@ class PingHandler(BaseHandler):
                     disable_notification=silent_mode
                 )
                 
-                # Плануємо авточистку для цього повідомлення
-                await self.auto_cleanup(sent_message)
+                # Плануємо авточистку (v1.6.3)
+                # Використовуємо create_task, щоб чистка не гальмувала чергу пінгів
+                if not add_stop_button:
+                    asyncio.create_task(self.auto_cleanup(sent_message))
+                else:
+                    stop_messages.append(sent_message)
                 
                 # Закріплюємо перше повідомлення
                 if is_first_chunk and pin_enabled:
@@ -223,6 +233,10 @@ class PingHandler(BaseHandler):
             except Exception as e:
                 self.logger.error(f"Помилка при відправці чанку {i}: {e}")
                 continue
+        
+        # В кінці всіх пінгів плануємо видалення кнопок "Стоп" (v1.6.3)
+        for msg in stop_messages:
+            asyncio.create_task(self.auto_cleanup(msg))
     
     async def cmd_all(self, message: Message):
         """Пінгує всіх користувачів"""

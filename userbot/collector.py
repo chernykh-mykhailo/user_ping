@@ -65,5 +65,11 @@ class UserbotCollector:
     
     async def stop(self):
         """Зупиняє userbot"""
-        await self.client.disconnect()
-        self.logger.info("Userbot зупинено")
+        try:
+            if self.client.is_connected():
+                # Даємо час фоновим задачам завершитись
+                await asyncio.sleep(1)
+                await self.client.disconnect()
+                self.logger.info("Userbot зупинено успішно")
+        except Exception as e:
+            self.logger.error(f"Помилка при зупинці Userbot: {e}")

@@ -103,11 +103,7 @@ class UserHandler(BaseHandler):
                 
                 # Повідомляємо реферера
                 try:
-                    from aiogram import Bot
-                    from config import BOT_TOKEN
-                    bot = Bot(token=BOT_TOKEN)
-                    
-                    await bot.send_message(
+                    await message.bot.send_message(
                         int(referrer_id),
                         f"🎁 <b>Новий реферал!</b>\n\n"
                         f"👤 {message.from_user.first_name} приєднався за вашим посиланням!\n"
@@ -115,8 +111,8 @@ class UserHandler(BaseHandler):
                         f"<i>Продовжуйте ділитися посиланням!</i>",
                         parse_mode="HTML"
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.warning(f"Failed to notify referrer: {e}")
                 
                 return
         
