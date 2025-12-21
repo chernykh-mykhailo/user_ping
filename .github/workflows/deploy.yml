@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy to which environment?'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+        - test
+        - prod
+        - both
 
 jobs:
   deploy:
@@ -16,12 +27,16 @@ jobs:
           username: ${{ secrets.USERNAME }}
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT || 22 }}
-          envs: ENV_FILE
+          envs: ENV_FILE,TARGET
+        env:
+          TARGET: ${{ github.event.inputs.target || 'test' }}
+        with:
           script: |
             set -e
             PROJECT_PATH="${{ secrets.PROJECT_PATH || '/root/projects/mafia/user_ping' }}"
             
             echo "Target path: $PROJECT_PATH"
+            echo "Deploying environment: $TARGET"
             
             if [ ! -d "$PROJECT_PATH/.git" ]; then
               echo "Directory empty or not a git repo. Syncing..."
@@ -37,15 +52,16 @@ jobs:
             # Restore .env file from Secrets
             echo "$ENV_FILE" > "$PROJECT_PATH/.env"
             
-            echo "Restarting containers..."
-            # Try both docker compose (v2) and docker-compose (v1)
-            if docker compose version > /dev/null 2>&1; then
+            echo "Restarting containers for: $TARGET"
+            
+            if [ "$TARGET" == "test" ]; then
+              docker compose up -d --build
+            elif [ "$TARGET" == "prod" ]; then
+              docker compose -f docker-compose-prod.yml up -d --build
+            else
               docker compose -f docker-compose-prod.yml up -d --build
               docker compose up -d --build
-            else
-              docker-compose -f docker-compose-prod.yml up -d --build
-              docker-compose up -d --build
             fi
             
             docker image prune -f
-            echo "Deployment finished successfully!"
+            echo "Deployment to $TARGET finished successfully!"
