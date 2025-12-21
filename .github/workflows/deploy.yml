@@ -22,15 +22,14 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
+        env:
+          TARGET: ${{ github.event.inputs.target || 'test' }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT || 22 }}
           envs: ENV_FILE,TARGET
-        env:
-          TARGET: ${{ github.event.inputs.target || 'test' }}
-        with:
           script: |
             set -e
             PROJECT_PATH="${{ secrets.PROJECT_PATH || '/root/projects/mafia/user_ping' }}"
