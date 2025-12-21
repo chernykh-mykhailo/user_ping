@@ -30,7 +30,11 @@ class ActivityMiddleware(BaseMiddleware):
                 # Якщо це НЕ команда і НЕ тригер (вони починаються з / або !)
                 if text and not text.startswith(('/', '!')):
                     # Список слів-команд без префіксів (додатковий захист)
-                    word_commands = ['анрег', 'рег', 'всі', 'хтось', 'стата', 'стоп']
+                    word_commands = [
+                        'анрег', 'рег', 'всі', 'хтось', 'стата', 'стоп', 
+                        'unreg', 'reg', 'all', 'stats', 'stop', 'help',
+                        'адміни', 'admins', 'збір', 'sync', 'преміум', 'premium'
+                    ]
                     first_word = text.strip().lower().split()[0] if text else ""
                     
                     if first_word not in word_commands:

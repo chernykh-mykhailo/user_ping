@@ -64,3 +64,23 @@ class BaseHandler(ABC):
                     await bot_message.delete()
                 except:
                     pass
+    async def _safe_answer(self, message: Message, text: str, **kwargs):
+        """Відправляє відповідь з обробкою FloodControl (v1.6.6)"""
+        import asyncio
+        import re
+        from aiogram.exceptions import TelegramRetryAfter
+        
+        while True:
+            try:
+                return await message.answer(text, **kwargs)
+            except TelegramRetryAfter as e:
+                # Якщо це Flood Control - чекаємо
+                import logging
+                logging.getLogger(__name__).warning(f"Flood Control! Чекаємо {e.retry_after}с перед відповіддю на {message.text}")
+                await asyncio.sleep(e.retry_after + 1)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Помилка при безпечній відправці: {e}")
+                # Для звичайних помилок - один раз пробуємо просто відправити
+                try: return await message.answer(text, **kwargs)
+                except: return None

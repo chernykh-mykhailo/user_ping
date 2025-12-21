@@ -382,18 +382,23 @@ class UserHandler(BaseHandler):
     
     async def cmd_unreg(self, message: Message):
         """Тимчасово вимикає пінги з можливістю авто-видалення"""
+        if message.chat.type not in ["group", "supergroup"]:
+            return
+            
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
+        self.logger.info(f"Команда анрег від {user_id} у чаті {chat_id}")
         
         added = self.chat_repo.add_to_temp_unreg(chat_id, user_id)
         
         if added:
-            sent = await message.answer(
+            sent = await self._safe_answer(
+                message, 
                 "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад."
             )
             await self.auto_cleanup(message, sent)
         else:
-            sent = await message.answer("ℹ️ Ви вже в режимі тимчасового анрегу.")
+            sent = await self._safe_answer(message, "ℹ️ Ви вже в режимі тимчасового анрегу.")
             await self.auto_cleanup(message, sent)
     
     async def cmd_superunreg(self, message: Message):
