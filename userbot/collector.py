@@ -84,9 +84,14 @@ class UserbotCollector:
 
     async def request_phone_code(self, phone: str):
         """Запитує код підтвердження для входу"""
-        if not self.client.is_connected():
-            await self.client.connect()
-        return await self.client.send_code_request(phone)
+        try:
+            if not self.client.is_connected():
+                await self.client.connect()
+            return await self.client.send_code_request(phone)
+        except Exception as e:
+            if self.client.is_connected():
+                await self.client.disconnect()
+            raise e
 
     async def sign_in_with_code(self, phone: str, code: str, phone_code_hash: str):
         """Вхід за кодом"""

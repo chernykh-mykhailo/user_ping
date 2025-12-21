@@ -343,7 +343,20 @@ class AdminHandler(BaseHandler):
             self.logger.info(f"Код успішно запитано для {phone}")
         except Exception as e:
             self.logger.error(f"Помилка при запиті коду: {e}")
-            await self._safe_answer(message, f"❌ Помилка при запиті коду: <code>{e}</code>\nСпробуйте знову: /ub_login", parse_mode="HTML")
+            error_text = str(e)
+            if "EMAIL_INSTALL_MISSING" in error_text:
+                msg = (
+                    "⚠️ <b>Telegram вимагає підтвердження через Email.</b>\n\n"
+                    "Це стається через занадто часті спроби входу або нові правила безпеки.\n\n"
+                    "<b>Що зробити:</b>\n"
+                    "1. Зачекайте 15-30 хвилин (обов'язково!).\n"
+                    "2. Переконайтеся, що у вас в налаштуваннях Telegram додана пошта.\n"
+                    "3. Спробуйте пізніше командою /ub_login."
+                )
+            else:
+                msg = f"❌ Помилка при запиті коду: <code>{error_text}</code>\nСпробуйте знову: /ub_login"
+            
+            await self._safe_answer(message, msg, parse_mode="HTML")
             await state.clear()
 
     async def process_auth_code(self, message: Message, state: FSMContext):
