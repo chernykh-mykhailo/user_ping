@@ -36,6 +36,7 @@ class AdminHandler(BaseHandler):
         self.router.message(Command("admin_settings"))(self.cmd_admin_settings)
         self.router.message(Command("admin_add_trigger"))(self.cmd_admin_add_trigger)
         self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
+        self.router.message(Command("admin_toggle_userbot"))(self.cmd_admin_toggle_userbot)
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -73,6 +74,15 @@ class AdminHandler(BaseHandler):
         status = await message.answer("🔄 Синхронізація учасників...")
         
         try:
+            # Перевіряємо чи увімкнено юзербота (v1.6.0)
+            # Ми звертаємося до bot.use_userbot (це має бути доступно через атрібут в main.py, 
+            # але краще перевірити напряму через репозиторій або передати стан)
+            # В нашому випадку простіше перевірити через репозиторій
+            is_enabled = self.chat_repo.get_global_setting("use_userbot", True)
+            if not is_enabled:
+                await status.edit_text("❌ Юзербота вимкнено в глобальних налаштуваннях. Синхронізація неможлива.")
+                return
+
             count = await self.userbot.sync_participants(message.chat.id)
             await status.edit_text(f"✅ База оновлена! Учасників: {count}")
             self.logger.info(f"Синхронізація завершена: {count} осіб")
@@ -113,10 +123,15 @@ class AdminHandler(BaseHandler):
         args = message.text.split()
         if len(args) < 3:
             current_delay = self.chat_repo.get_global_setting("ping_delay", PING_LIMITS["default_delay"])
+            use_ub = self.chat_repo.get_global_setting("use_userbot", True)
+            
             await message.answer(
                 f"⚙️ <b>Global Settings</b>\n\n"
-                f"Current Global Delay: {current_delay}s\n\n"
-                f"Usage: /admin_settings set_delay 0.5"
+                f"• Delay: {current_delay}s\n"
+                f"• Userbot: {'✅ ON' if use_ub else '❌ OFF'}\n\n"
+                f"Usage:\n"
+                f"<code>/admin_settings set_delay 0.5</code>\n"
+                f"<code>/admin_toggle_userbot</code>"
             )
             return
             
@@ -167,3 +182,30 @@ class AdminHandler(BaseHandler):
             await message.answer(f"✅ Global Trigger '{trigger}' removed")
         else:
             await message.answer(f"❌ Global Trigger '{trigger}' not found")
+
+    async def cmd_admin_toggle_userbot(self, message: Message):
+        """Перемикає використання юзербота (Global)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        current = self.chat_repo.get_global_setting("use_userbot", True)
+        new_state = not current
+        
+        self.chat_repo.set_global_setting("use_userbot", new_state)
+        
+        try:
+            if new_state:
+                await self.userbot.start()
+                status = "УВІМКНЕНО ✅ (З'єднання встановлено)"
+            else:
+                await self.userbot.stop()
+                status = "ВИМКНЕНО ❌ (Сесію закрито, акаунт вільний)"
+        except Exception as e:
+            self.logger.error(f"Error toggling userbot: {e}")
+            status = f"{'УВІМКНЕНО' if new_state else 'ВИМКНЕНО'} (Але виникла помилка зв'язку: {e})"
+        
+        await message.answer(
+            f"🤖 <b>Використання юзербота:</b> {status}\n\n"
+            f"Тепер ви можете використовувати цей акаунт в іншому місці, якщо він вимкнений.",
+            parse_mode="HTML"
+        )

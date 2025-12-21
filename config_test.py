@@ -8,6 +8,7 @@ from dataclasses import dataclass
 API_ID = int(os.getenv('API_ID', '0'))
 API_HASH = os.getenv('API_HASH', '')
 SESSION_NAME = os.getenv('SESSION_NAME', 'account2_session')
+USE_USERBOT = os.getenv('USE_USERBOT', 'True').lower() == 'true'
 
 # ТЕСТОВИЙ БОТ
 # Спочатку шукаємо специфічний для тесту токен, якщо немає - беремо загальний BOT_TOKEN

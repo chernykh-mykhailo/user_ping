@@ -15,7 +15,7 @@ from __version__ import __version__
 # Конфігурація
 from config import (
     API_ID, API_HASH, SESSION_NAME,
-    BOT_TOKEN, DB_FILE
+    BOT_TOKEN, DB_FILE, USE_USERBOT
 )
 
 # Core components
@@ -59,7 +59,9 @@ class PingBot:
         self.bot = Bot(token=BOT_TOKEN)
         self.dp = Dispatcher()
         
-        # Userbot
+        # Userbot (Dynamic state)
+        self.use_userbot = self.chat_repo.get_global_setting("use_userbot", USE_USERBOT)
+        
         self.userbot = UserbotCollector(
             api_id=API_ID,
             api_hash=API_HASH,
@@ -223,8 +225,11 @@ class PingBot:
     async def start(self):
         """Запускає бота"""
         try:
-            # Запускаємо userbot
-            await self.userbot.start()
+            # Запускаємо userbot тільки якщо він увімкнений
+            if self.use_userbot:
+                await self.userbot.start()
+            else:
+                self.logger.info("Userbot is DISABLED by global setting")
             
             # Реєструємо команди
             await self._setup_commands()
@@ -245,7 +250,8 @@ class PingBot:
     
     async def stop(self):
         """Зупиняє бота"""
-        await self.userbot.stop()
+        if self.use_userbot:
+            await self.userbot.stop()
         await self.bot.session.close()
         self.logger.info("=" * 50)
         self.logger.info("🛑 СИСТЕМА ЗУПИНЕНА")
