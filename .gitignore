@@ -47,7 +47,9 @@ desktop.ini
 *.sqlite
 *.log
 users_data.json
+users_data_test.json
 *.json.backup
+backups/
 
 # Environment variables
 .env

@@ -27,6 +27,19 @@ class SettingsHandler(BaseHandler):
         self.router.callback_query(F.data.startswith("toggle_"))(self.callback_toggle_setting)
         self.router.callback_query(F.data.startswith("change_speed_"))(self.callback_change_speed)
         self.router.callback_query(F.data.startswith("set_speed_"))(self.callback_set_speed)
+        self.router.callback_query(F.data.startswith("cycle_auto_cleanup"))(self.callback_cycle_auto_cleanup)
+        self.router.callback_query(F.data == "delete_message")(self.callback_delete_message)
+    
+    async def callback_delete_message(self, callback: CallbackQuery):
+        """Видаляє повідомлення (закриває меню)"""
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        try:
+            await callback.answer()
+        except TelegramBadRequest:
+            pass
     
     async def _is_admin(self, chat_id: int, user_id: int, bot) -> bool:
         """Перевіряє права адміністратора"""
@@ -127,6 +140,10 @@ class SettingsHandler(BaseHandler):
         pin_enabled = self.chat_repo.get_setting(chat_id, "pin_enabled", True)
         first_msg_stop = self.chat_repo.get_setting(chat_id, "first_msg_stop", True)
         admin_stop_report = self.chat_repo.get_setting(chat_id, "admin_stop_report", True)
+        silent_mode = self.chat_repo.get_setting(chat_id, "silent_mode", False)
+        show_count = self.chat_repo.get_setting(chat_id, "show_count", True)
+        auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
+        restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -145,7 +162,7 @@ class SettingsHandler(BaseHandler):
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"{'✅' if pin_enabled else '❌'} Закріплювати повідомлення", 
+                    text=f"{'✅' if pin_enabled else '❌'} Закріплювати пінги", 
                     callback_data=f"toggle_pin_enabled{suffix}"
                 )
             ],
@@ -157,8 +174,32 @@ class SettingsHandler(BaseHandler):
             ],
             [
                 InlineKeyboardButton(
-                    text=f"{'✅' if admin_stop_report else '❌'} Показувати хто зупинив", 
+                    text=f"{'✅' if admin_stop_report else '❌'} Звіт про зупинку", 
                     callback_data=f"toggle_admin_stop_report{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🔕' if silent_mode else '🔔'} Без звуку: {'ТАК' if silent_mode else 'НІ'}", 
+                    callback_data=f"toggle_silent_mode{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'📊' if show_count else '😶'} Показувати к-сть: {'ТАК' if show_count else 'НІ'}", 
+                    callback_data=f"toggle_show_count{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"🗑 Авточистка: {auto_cleanup if auto_cleanup > 0 else 'ВИМК'}s", 
+                    callback_data=f"cycle_auto_cleanup{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🔔' if restart_notice else '🔕'} Сповіщення про запуск: {'ТАК' if restart_notice else 'НІ'}", 
+                    callback_data=f"toggle_restart_notice{suffix}"
                 )
             ],
             [
@@ -172,12 +213,31 @@ class SettingsHandler(BaseHandler):
             ]
         ])
         
+        # Перевірка прав адміністратора (v1.6.0)
+        admin_warning = ""
+        try:
+            # Чат айді може бути негативним для груп
+            cid = int(chat_id)
+            if cid < 0:
+                bot_member = await message.bot.get_chat_member(cid, message.bot.id)
+                
+                # В деяких типах об'єктів aiogram права в окремих атрибутах
+                has_delete = getattr(bot_member, 'can_delete_messages', False)
+                has_pin = getattr(bot_member, 'can_pin_messages', False)
+                
+                if not (has_delete and has_pin):
+                    admin_warning = "⚠️ <b>Потрібні права Адміна:</b>\n"
+                    if not has_delete: admin_warning += "• Видалення (для авточистки)\n"
+                    if not has_pin: admin_warning += "• Закріплення (для пінгача)\n\n"
+        except:
+            pass
+
         text = (
-            "<b>⚙️ Налаштування чату</b>\n\n"
+            f"<b>⚙️ Налаштування чату {chat_id}</b>\n\n"
+            f"{admin_warning}"
             "Натисніть на кнопку, щоб змінити налаштування:\n\n"
             "<b>📢 Кастомні виклики:</b>\n"
-            "• <code>!addtrigger слово</code> — Додати виклик (текст)\n"
-            "• <code>!addemojitrigger слово</code> — Додати виклик (емодзі)\n"
+            "• <code>!addtrigger слово</code> — Додати виклик\n"
             "• <code>!deltrigger слово</code> — Видалити виклик\n"
             "• <code>!triggers</code> — Список викликів"
         )
@@ -196,6 +256,10 @@ class SettingsHandler(BaseHandler):
         pin_enabled = self.chat_repo.get_setting(chat_id, "pin_enabled", True)
         first_msg_stop = self.chat_repo.get_setting(chat_id, "first_msg_stop", True)
         admin_stop_report = self.chat_repo.get_setting(chat_id, "admin_stop_report", True)
+        silent_mode = self.chat_repo.get_setting(chat_id, "silent_mode", False)
+        show_count = self.chat_repo.get_setting(chat_id, "show_count", True)
+        auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
+        restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -213,7 +277,7 @@ class SettingsHandler(BaseHandler):
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"{'✅' if pin_enabled else '❌'} Закріплювати повідомлення", 
+                    text=f"{'✅' if pin_enabled else '❌'} Закріплювати пінги", 
                     callback_data=f"toggle_pin_enabled{suffix}"
                 )
             ],
@@ -225,8 +289,32 @@ class SettingsHandler(BaseHandler):
             ],
             [
                 InlineKeyboardButton(
-                    text=f"{'✅' if admin_stop_report else '❌'} Показувати хто зупинив", 
+                    text=f"{'✅' if admin_stop_report else '❌'} Звіт про зупинку", 
                     callback_data=f"toggle_admin_stop_report{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🔕' if silent_mode else '🔔'} Без звуку: {'ТАК' if silent_mode else 'НІ'}", 
+                    callback_data=f"toggle_silent_mode{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'📊' if show_count else '😶'} Показувати к-сть: {'ТАК' if show_count else 'НІ'}", 
+                    callback_data=f"toggle_show_count{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"🗑 Авточистка: {auto_cleanup if auto_cleanup > 0 else 'ВИМК'}s", 
+                    callback_data=f"cycle_auto_cleanup{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🔔' if restart_notice else '🔕'} Сповіщення про запуск: {'ТАК' if restart_notice else 'НІ'}", 
+                    callback_data=f"toggle_restart_notice{suffix}"
                 )
             ],
             [
@@ -251,15 +339,15 @@ class SettingsHandler(BaseHandler):
 
     async def callback_toggle_setting(self, callback: CallbackQuery):
         """Перемикає налаштування"""
-        # toggle_pin_enabled_ownerid_chatid
-        parts = callback.data.split("_")
+        # format: toggle_KEYNAME_ownerid_chatid
+        data = callback.data
         
-        # Перевіряємо чи є owner_id в callback_data
-        if len(parts) >= 4:
-            # Є owner_id та chat_id
-            setting_key = parts[1]  # pin_enabled, first_msg_stop, etc.
-            owner_id = int(parts[2])
-            chat_id = parts[3]
+        # Витягуємо owner_id та chat_id з кінця (вони завжди там)
+        try:
+            # Намагаємося витягти 2 останніх елементи
+            prefix_part, owner_id_str, chat_id = data.rsplit("_", 2)
+            owner_id = int(owner_id_str)
+            setting_key = prefix_part.replace("toggle_", "")
             
             # Перевірка власника
             if callback.from_user.id != owner_id:
@@ -268,15 +356,15 @@ class SettingsHandler(BaseHandler):
                 except TelegramBadRequest:
                     pass
                 return
-        else:
-            # Старий формат без owner_id
+        except (ValueError, IndexError):
+            # Старий формат або помилка формату
             if not await self._is_admin(callback.message.chat.id, callback.from_user.id, callback.bot):
                 try:
                     await callback.answer("❌ Тільки адміни!", show_alert=True)
                 except TelegramBadRequest:
                     pass
                 return
-            setting_key = callback.data.replace("toggle_", "")
+            setting_key = data.replace("toggle_", "")
             chat_id = get_clean_chat_id(callback.message.chat.id)
             owner_id = None
         
@@ -296,12 +384,12 @@ class SettingsHandler(BaseHandler):
 
     async def callback_change_speed(self, callback: CallbackQuery):
         """Показує меню вибору швидкості"""
-        # change_speed_ownerid_chatid
-        parts = callback.data.split("_")
+        # format: change_speed_ownerid_chatid
+        data = callback.data
         
-        if len(parts) >= 4:
-            owner_id = int(parts[2])
-            chat_id = parts[3]
+        try:
+            _, _, owner_id_str, chat_id = data.rsplit("_", 3) # change_speed_owner_chat
+            owner_id = int(owner_id_str)
             
             if callback.from_user.id != owner_id:
                 try:
@@ -310,7 +398,7 @@ class SettingsHandler(BaseHandler):
                     pass
                 return
             suffix = f"_{owner_id}_{chat_id}"
-        else:
+        except (ValueError, IndexError):
             if not await self._is_admin(callback.message.chat.id, callback.from_user.id, callback.bot):
                 return
             suffix = ""
@@ -343,16 +431,17 @@ class SettingsHandler(BaseHandler):
 
     async def callback_set_speed(self, callback: CallbackQuery):
         """Встановлює швидкість"""
-        # set_speed_0.5_ownerid_chatid
-        parts = callback.data.split("_")
+        # format: set_speed_VAL_ownerid_chatid
+        data = callback.data
         
-        # Витягуємо speed (parts[2] = "0.5" або "0.1" etc.)
-        speed_str = parts[2]
-        
-        if len(parts) >= 5:
-            # Є owner_id та chat_id
-            owner_id = int(parts[3])
-            chat_id = parts[4]
+        try:
+            parts = data.rsplit("_", 3)
+            # set, speed, VAL, owner, chat
+            speed_str = parts[1] # Actually wait rsplit(_, 3) gives [set_speed, VAL, owner, chat]
+            # No, data is "set_speed_0.1_123_456"
+            # rsplit(_, 3) -> ["set_speed", "0.1", "123", "456"]
+            _, speed_str, owner_id_str, chat_id = parts
+            owner_id = int(owner_id_str)
             
             if callback.from_user.id != owner_id:
                 try:
@@ -360,7 +449,10 @@ class SettingsHandler(BaseHandler):
                 except TelegramBadRequest:
                     pass
                 return
-        else:
+        except (ValueError, IndexError):
+            # Fallback
+            parts = data.split("_")
+            speed_str = parts[2]
             if not await self._is_admin(callback.message.chat.id, callback.from_user.id, callback.bot):
                 return
             owner_id = None
@@ -378,6 +470,47 @@ class SettingsHandler(BaseHandler):
         
         try:
             await callback.answer(f"✅ Швидкість встановлено: {speed}s")
+        except TelegramBadRequest:
+            pass
+            
+        await self._show_settings_menu(callback.message, is_edit=True, owner_id=owner_id, original_chat_id=chat_id)
+
+    async def callback_cycle_auto_cleanup(self, callback: CallbackQuery):
+        """Циклічно перемикає затримку автоматичного видалення всіх команд"""
+        # format: cycle_auto_cleanup_ownerid_chatid
+        data = callback.data
+        
+        try:
+            _, _, owner_id_str, chat_id = data.rsplit("_", 3)
+            owner_id = int(owner_id_str)
+            
+            if callback.from_user.id != owner_id:
+                try:
+                    await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
+                except TelegramBadRequest:
+                    pass
+                return
+        except (ValueError, IndexError):
+            if not await self._is_admin(callback.message.chat.id, callback.from_user.id, callback.bot):
+                return
+            owner_id = None
+            chat_id = get_clean_chat_id(callback.message.chat.id)
+            
+        # Отримуємо поточне значення
+        current = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
+        
+        # Цикл: 0 -> 5 -> 10 -> 30 -> 60 -> 0
+        cycle = [0, 5, 10, 30, 60]
+        try:
+            idx = cycle.index(current)
+            new_val = cycle[(idx + 1) % len(cycle)]
+        except ValueError:
+            new_val = 0
+            
+        self.chat_repo.set_setting(chat_id, "auto_cleanup", new_val)
+        
+        try:
+            await callback.answer(f"✅ Авточистка: {new_val if new_val > 0 else 'ВИМК'}s")
         except TelegramBadRequest:
             pass
             

@@ -36,6 +36,7 @@ class PaymentHandler(BaseHandler):
         self.router.message(Command("admin_payments"))(self.cmd_admin_payments)
         self.router.message(Command("admin_grant_premium"))(self.cmd_admin_grant_premium)
         self.router.message(Command("admin_revoke_premium"))(self.cmd_admin_revoke_premium)
+        self.router.message(Command("ahelp"))(self.cmd_admin_help)
         
         # v1.5.0 - Chat Premium
         self.router.message(Command("chat_premium"))(self.cmd_chat_premium)
@@ -70,7 +71,8 @@ class PaymentHandler(BaseHandler):
             "/buy_month — Купити на місяць\n"
             "/buy_year — Купити на рік"
         )
-        await message.answer(premium_text, parse_mode="HTML")
+        sent = await message.answer(premium_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     async def cmd_buy_month(self, message: Message):
         """Створює рахунок на місяць преміуму"""
@@ -171,7 +173,8 @@ class PaymentHandler(BaseHandler):
             "<i>⚠️ Увага: після повернення коштів ваш Premium буде скасовано</i>"
         )
         
-        await message.answer(refund_text, parse_mode="HTML")
+        sent = await message.answer(refund_text, parse_mode="HTML", disable_web_page_preview=True)
+        await self.auto_cleanup(message, sent)
     
     async def cmd_refund_confirm(self, message: Message):
         """Підтверджує та виконує рефанд"""
@@ -335,6 +338,13 @@ class PaymentHandler(BaseHandler):
             return
         
         parts = message.text.split()
+        full_text = message.text
+        
+        # Витягуємо флаг тихого режиму
+        silent = "-s" in parts
+        if silent:
+            parts.remove("-s")
+            full_text = full_text.replace("-s", "").strip()
         
         # Варіант 1: У відповідь на повідомлення
         if message.reply_to_message:
@@ -346,6 +356,8 @@ class PaymentHandler(BaseHandler):
             username = message.reply_to_message.from_user.username or "користувач"
             try:
                 days = int(parts[1])
+                # Коментар - все що після днів
+                comment = " ".join(parts[2:]).strip()
             except ValueError:
                 await message.answer("❌ Кількість днів має бути числом")
                 return
@@ -356,19 +368,12 @@ class PaymentHandler(BaseHandler):
             
             # Перевіряємо чи це username
             if user_identifier.startswith('@'):
-                username_to_find = user_identifier[1:]  # Без @
-                
-                # Шукаємо в базі даних чату
+                username_to_find = user_identifier[1:]
                 from utils.helpers import get_clean_chat_id
                 
-                # Якщо команда в групі - шукаємо в цьому чаті
                 if message.chat.type in ['group', 'supergroup']:
-                    chat_id = get_clean_chat_id(message.chat.id)
-                    
-                    # Шукаємо user_id по username через userbot
                     user_id = None
                     username = None
-                    
                     if self.userbot:
                         try:
                             async for user in self.userbot.client.iter_participants(message.chat.id):
@@ -383,21 +388,13 @@ class PaymentHandler(BaseHandler):
                         await message.answer(
                             f"❌ Користувача @{username_to_find} не знайдено в цьому чаті.\n\n"
                             "<b>Використайте один з варіантів:</b>\n"
-                            "1️⃣ У відповідь на повідомлення користувача:\n"
-                            "   <code>/admin_grant_premium 30</code>\n\n"
-                            "2️⃣ За User ID:\n"
-                            "   <code>/admin_grant_premium 831190060 30</code>\n\n"
-                            "<i>💡 User ID можна дізнатися через @userinfobot</i>",
+                            "1️⃣ У відповідь: <code>/admin_grant_premium 30</code>\n"
+                            "2️⃣ За ID: <code>/admin_grant_premium 831190060 30</code>",
                             parse_mode="HTML"
                         )
                         return
                 else:
-                    await message.answer(
-                        "❌ Видача Premium по @username працює тільки в групових чатах.\n\n"
-                        "<b>Використайте:</b>\n"
-                        "• За User ID: <code>/admin_grant_premium 831190060 30</code>",
-                        parse_mode="HTML"
-                    )
+                    await message.answer("❌ @username працює тільки в групах.")
                     return
             else:
                 user_id = user_identifier
@@ -405,6 +402,8 @@ class PaymentHandler(BaseHandler):
             
             try:
                 days = int(parts[2])
+                # Коментар - все що після днів
+                comment = " ".join(parts[3:]).strip()
             except ValueError:
                 await message.answer("❌ Кількість днів має бути числом")
                 return
@@ -412,18 +411,11 @@ class PaymentHandler(BaseHandler):
         else:
             await message.answer(
                 "❌ Неправильний формат.\n\n"
-                "<b>Використання:</b>\n\n"
-                "1️⃣ <b>У відповідь на повідомлення:</b>\n"
-                "<code>/admin_grant_premium 30</code>\n\n"
-                "2️⃣ <b>За User ID:</b>\n"
-                "<code>/admin_grant_premium 831190060 30</code>\n\n"
-                "3️⃣ <b>За @username (в групі):</b>\n"
-                "<code>/admin_grant_premium @username 30</code>\n\n"
+                "<b>Використання:</b>\n"
+                "• <code>/admin_grant_premium [ID/reply] [days] [comment] [-s]</code>\n\n"
                 "<b>Приклади:</b>\n"
-                "• /admin_grant_premium 831190060 30 — місяць\n"
-                "• /admin_grant_premium @user 365 — рік\n"
-                "• /admin_grant_premium 831190060 7 — тиждень\n\n"
-                "<i>💡 Найпростіше: відповісти на повідомлення користувача</i>",
+                "• <code>/admin_grant_premium 30 Тобі подарунок!</code>\n"
+                "• <code>/admin_grant_premium 831190060 365 -s</code> (тихо)",
                 parse_mode="HTML"
             )
             return
@@ -458,19 +450,29 @@ class PaymentHandler(BaseHandler):
                 parse_mode="HTML"
             )
             
-            # Спробуємо повідомити користувача
-            try:
-                await self.bot.send_message(
-                    int(user_id),
-                    f"🎉 <b>Вітаємо!</b>\n\n"
-                    f"Вам надано 👑 Premium статус на {period_text}!\n"
-                    f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
-                    f"Тепер ви можете використовувати /superunreg для постійного вимкнення пінгів.",
-                    parse_mode="HTML"
-                )
-                self.logger.info(f"Користувача {user_id} повідомлено про Premium")
-            except Exception as e:
-                self.logger.warning(f"Не вдалося повідомити користувача {user_id}: {e}")
+            # Спробуємо повідомити користувача (якщо не тихий режим)
+            if not silent:
+                try:
+                    msg_to_user = f"🎉 <b>Вітаємо!</b>\n\n"
+                    if comment:
+                        msg_to_user += f"💬 <b>Коментар:</b> {comment}\n\n"
+                    
+                    msg_to_user += (
+                        f"Вам надано 👑 Premium статус на {period_text}!\n"
+                        f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                        f"Тепер ви можете використовувати /superunreg для постійного вимкнення пінгів."
+                    )
+                    
+                    await self.bot.send_message(
+                        int(user_id),
+                        msg_to_user,
+                        parse_mode="HTML"
+                    )
+                    self.logger.info(f"Користувача {user_id} повідомлено про Premium")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося повідомити користувача {user_id}: {e}")
+            else:
+                self.logger.info(f"Silent grant for user {user_id} - no message sent")
             
             self.logger.info(f"Admin granted {days} days premium to user {user_id}")
             
@@ -604,6 +606,25 @@ class PaymentHandler(BaseHandler):
                 
         except Exception as e:
             await message.answer(f"❌ Помилка: {e}")
+
+    async def cmd_admin_help(self, message: Message):
+        """Показує довідку для адмінів бота"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        help_text = (
+            "🔐 <b>Панель Адміністратора Бота</b>\n\n"
+            "<b>👑 Керування Premium:</b>\n"
+            "• <code>/admin_grant_premium [ID/reply] [days] [comment] [-s]</code> — Надати преміум\n"
+            "• <code>/admin_revoke_premium [ID/username/reply]</code> — Забрати преміум\n\n"
+            "<b>💰 Платежі та Фінанси:</b>\n"
+            "• <code>/admin_payments [ID]</code> — Перегляд історії Stars\n"
+            "• <code>/admin_add_payment [ID] [Stars]</code> — Додати платіж вручну\n\n"
+            "<b>💡 Підказки:</b>\n"
+            "• <i>-s</i> — тихий режим (юзер не отримає сповіщення)\n"
+            "• Для видачі по reply просто напишіть <code>/admin_grant_premium 30</code> у відповідь на повідомлення"
+        )
+        await message.answer(help_text, parse_mode="HTML")
     
     # === v1.5.0 - Chat Premium ===
     
@@ -646,7 +667,8 @@ class PaymentHandler(BaseHandler):
                 "• /buy_chat_year — рік"
             )
         
-        await message.answer(premium_text, parse_mode="HTML")
+        sent = await message.answer(premium_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     async def cmd_buy_chat_month(self, message: Message):
         """Купує Chat Premium на місяць"""
@@ -689,7 +711,8 @@ class PaymentHandler(BaseHandler):
             "<i>💡 Ідеально для подарунка на день народження!</i>"
         )
         
-        await message.answer(gift_text, parse_mode="HTML")
+        sent = await message.answer(gift_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     async def cmd_send_gift_week(self, message: Message):
         """Відправляє подарунок на 7 днів"""
@@ -711,12 +734,26 @@ class PaymentHandler(BaseHandler):
         recipient_id = str(message.reply_to_message.from_user.id)
         recipient_name = message.reply_to_message.from_user.first_name
         
+        # Обробляємо коментарі та флаги
+        parts = message.text.split()
+        silent = "-s" in parts
+        if silent:
+            parts.remove("-s")
+        
+        comment = " ".join(parts[1:]).strip()
+        
         plan = GIFT_PLANS[plan_type]
+        
+        # Payload limit is 128 bytes. Format: gift_PLAN_ID_S|COMMENT
+        silent_flag = "1" if silent else "0"
+        # Truncate comment if too long (max ~90 chars safe)
+        safe_comment = comment[:80]
+        full_payload = f"gift_{plan_type}_{recipient_id}_{silent_flag}|{safe_comment}"
         
         await message.answer_invoice(
             title=f"🎁 Подарунок для {recipient_name}",
             description=f"Premium на {plan.days} днів",
-            payload=f"gift_{plan_type}_{recipient_id}",
+            payload=full_payload,
             currency="XTR",
             prices=[LabeledPrice(label=plan.name, amount=plan.price)],
             provider_token=""
@@ -750,7 +787,8 @@ class PaymentHandler(BaseHandler):
             f"<i>💡 Поділіться посиланням з друзями!</i>"
         )
         
-        await message.answer(referral_text, parse_mode="HTML")
+        sent = await message.answer(referral_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     async def process_successful_payment(self, message: Message):
         """Обробляє успішний платіж"""
@@ -789,9 +827,20 @@ class PaymentHandler(BaseHandler):
         
         elif payload.startswith("gift_"):
             # Gift Premium
-            parts = payload.split("_")
-            plan_type = parts[1]
-            recipient_id = parts[2]
+            # Format: gift_PLAN_ID_S|COMMENT
+            try:
+                base_part, comment = payload.split("|", 1) if "|" in payload else (payload, "")
+                parts = base_part.split("_")
+                plan_type = parts[1]
+                recipient_id = parts[2]
+                silent = parts[3] == "1" if len(parts) > 3 else False
+            except:
+                # Fallback for old style
+                parts = payload.split("_")
+                plan_type = parts[1]
+                recipient_id = parts[2]
+                silent = False
+                comment = ""
             
             plan = GIFT_PLANS[plan_type]
             expiry = self.premium_repo.grant_premium(recipient_id, plan.days)
@@ -800,26 +849,37 @@ class PaymentHandler(BaseHandler):
             await message.answer(
                 f"✅ <b>Подарунок відправлено!</b>\n\n"
                 f"🎁 Premium на {plan.days} днів\n"
-                f"👤 Отримувач отримав повідомлення\n\n"
+                f"👤 Отримувач: {recipient_id}\n\n"
                 f"<i>Дякуємо за щедрість! 💝</i>",
                 parse_mode="HTML"
             )
             
-            # Повідомляємо отримувача
-            try:
-                sender_name = message.from_user.first_name
-                await self.bot.send_message(
-                    int(recipient_id),
-                    f"🎁 <b>Ви отримали подарунок!</b>\n\n"
-                    f"👤 Від: {sender_name}\n"
-                    f"💎 Premium на {plan.days} днів\n"
-                    f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
-                    f"<i>Тепер ви можете використовувати /superunreg!</i>",
-                    parse_mode="HTML"
-                )
-                self.logger.info(f"Gift sent from {user_id} to {recipient_id}")
-            except Exception as e:
-                self.logger.warning(f"Failed to notify gift recipient {recipient_id}: {e}")
+            # Повідомляємо отримувача (якщо не тихо)
+            if not silent:
+                try:
+                    sender_name = message.from_user.first_name
+                    msg_to_user = f"🎁 <b>Ви отримали подарунок!</b>\n\n"
+                    
+                    if comment:
+                        msg_to_user += f"💬 <b>Коментар:</b> {comment}\n\n"
+                        
+                    msg_to_user += (
+                        f"👤 Від: {sender_name}\n"
+                        f"💎 Premium на {plan.days} днів\n"
+                        f"📅 Діє до: {expiry.strftime('%d.%m.%Y')}\n\n"
+                        f"<i>Тепер ви можете використовувати /superunreg!</i>"
+                    )
+                    
+                    await self.bot.send_message(
+                        int(recipient_id),
+                        msg_to_user,
+                        parse_mode="HTML"
+                    )
+                    self.logger.info(f"Gift sent from {user_id} to {recipient_id}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to notify gift recipient {recipient_id}: {e}")
+            else:
+                self.logger.info(f"Silent gift from {user_id} to {recipient_id} - no message sent")
         
         elif payload.startswith("premium_"):
             # Personal Premium

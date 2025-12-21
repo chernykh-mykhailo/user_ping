@@ -2,6 +2,7 @@
 User handlers - команди користувача (SRP)
 """
 import logging
+import asyncio
 from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -42,6 +43,16 @@ class UserHandler(BaseHandler):
         
         self.router.message(Command("reg"))(self.cmd_reg)
         self.router.message(F.text.regexp(r'^!?рег', flags=0))(self.cmd_reg)
+        
+        # Global Unreg (v1.5.0+)
+        self.router.message(Command("gunreg"))(self.cmd_global_unreg)
+        self.router.message(F.text.regexp(r'^!?ганрег', flags=0))(self.cmd_global_unreg)
+        
+        self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
+        self.router.message(F.text.regexp(r'^!?гсуперанрег', flags=0))(self.cmd_global_superunreg)
+        
+        self.router.message(Command("greg"))(self.cmd_global_reg)
+        self.router.message(F.text.regexp(r'^!?грег', flags=0))(self.cmd_global_reg)
         
         # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
@@ -127,7 +138,8 @@ class UserHandler(BaseHandler):
         
         help_text = (
             f"<b>📋 Довідка бота v{__version__}</b>\n\n"
-            "Оберіть розділ для детальної інформації:\n\n"
+            "Оберіть розділ для детальної інформації.\n\n"
+            "⚠️ <b>Порада:</b> Для стабільної роботи (авточистка, пін) надайте боту права <b>Адміністратора</b> (видалення та закріплення).\n\n"
             "📢 <b>Пінги</b> — Виклики користувачів\n"
             "🎯 <b>Тригери</b> — Вибіркові виклики груп\n"
             "🎮 <b>Панель ролей</b> — Самореєстрація\n"
@@ -139,7 +151,30 @@ class UserHandler(BaseHandler):
             f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>"
         )
         
-        await message.answer(help_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+        sent = await message.answer(help_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+        await self.auto_cleanup(message, sent)
+
+    async def handle_user_activity(self, message: Message):
+        """Відстежує активність користувача для зняття анрегу (v1.6.0)"""
+        # Тільки для груп
+        if not message.chat or message.chat.type not in ["group", "supergroup"]:
+            return
+            
+        # Ігноруємо ботів
+        if message.from_user and message.from_user.is_bot:
+            return
+            
+        text = message.text or message.caption or ""
+        # Якщо це команда або тригер - ігноруємо (вони обробляються окремо і не знімають анрег)
+        if text.startswith(('/', '!')):
+            return
+            
+        chat_id = get_clean_chat_id(message.chat.id)
+        user_id = str(message.from_user.id)
+        name = message.from_user.first_name or "Учасник"
+        
+        # Оновлюємо ім'я та знімаємо тимчасовий анрег
+        self.chat_repo.save_user(chat_id, user_id, name, update_unreg=True)
     
     async def callback_help_section(self, callback: CallbackQuery):
         """Обробляє вибір розділу довідки"""
@@ -321,21 +356,24 @@ class UserHandler(BaseHandler):
             f"<a href='{PROJECTS_CHANNEL}'>Telegram канал</a>\n\n"
             "<i>Ми завжди раді вашому фідбеку! 🙏</i>"
         )
-        await message.answer(feedback_text, parse_mode="HTML", disable_web_page_preview=True)
+        sent = await message.answer(feedback_text, parse_mode="HTML", disable_web_page_preview=True)
+        await self.auto_cleanup(message, sent)
     
     async def cmd_unreg(self, message: Message):
-        """Тимчасово вимикає пінги"""
+        """Тимчасово вимикає пінги з можливістю авто-видалення"""
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
         
         added = self.chat_repo.add_to_temp_unreg(chat_id, user_id)
         
         if added:
-            await message.answer(
+            sent = await message.answer(
                 "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад."
             )
+            await self.auto_cleanup(message, sent)
         else:
-            await message.answer("ℹ️ Ви вже в режимі тимчасового анрегу.")
+            sent = await message.answer("ℹ️ Ви вже в режимі тимчасового анрегу.")
+            await self.auto_cleanup(message, sent)
     
     async def cmd_superunreg(self, message: Message):
         """Постійно вимикає пінги (тільки з Premium)"""
@@ -343,23 +381,26 @@ class UserHandler(BaseHandler):
         
         # Перевірка преміуму
         if not self.premium_repo.has_premium(user_id):
-            await message.answer(
+            sent = await message.answer(
                 "🚫 <b>Доступ заборонено</b>\n\n"
                 "Команда /superunreg доступна тільки з 👑 Premium статусом.\n\n"
                 "Купити Premium: /premium",
                 parse_mode="HTML"
             )
+            await self.auto_cleanup(message, sent)
             return
         
         chat_id = get_clean_chat_id(message.chat.id)
         added = self.chat_repo.add_to_super_unreg(chat_id, user_id)
         
         if added:
-            await message.answer(
+            sent = await message.answer(
                 "🚫 Пінги вимкнено назавжди. Використайте /reg або !рег для повернення."
             )
         else:
-            await message.answer("ℹ️ Ви вже в режимі постійного анрегу.")
+            sent = await message.answer("ℹ️ Ви вже в режимі постійного анрегу.")
+        
+        await self.auto_cleanup(message, sent)
     
     async def cmd_reg(self, message: Message):
         """Увімкнює пінги назад"""
@@ -369,11 +410,13 @@ class UserHandler(BaseHandler):
         removed = self.chat_repo.remove_from_unreg(chat_id, user_id)
         
         if removed:
-            await message.answer(
+            sent = await message.answer(
                 "✅ Пінги увімкнено! Тепер ви знову отримуватимете сповіщення."
             )
         else:
-            await message.answer("ℹ️ Ви і так отримуєте пінги.")
+            sent = await message.answer("ℹ️ Ви і так отримуєте пінги.")
+        
+        await self.auto_cleanup(message, sent)
     
     async def cmd_balance(self, message: Message):
         """Показує статус преміуму"""
@@ -396,4 +439,61 @@ class UserHandler(BaseHandler):
                 "Купити Premium: /premium"
             )
         
-        await message.answer(balance_text, parse_mode="HTML")
+        sent = await message.answer(balance_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
+
+    # === Global Unreg Logic ===
+
+    async def cmd_global_unreg(self, message: Message):
+        """Вимкнення пінгів у всіх чатах відразу"""
+        user_id = str(message.from_user.id)
+        
+        self.chat_repo.add_to_global_unreg(user_id, is_super=False)
+        
+        sent = await message.answer(
+            "🔇 <b>Глобальний анрег активовано!</b>\n\n"
+            "Ви більше не отримуватимете пінги в <b>жодному</b> чаті, де є цей бот.\n"
+            "<i>(Пінг увімкнеться автоматично, якщо ви напишете в будь-якому чаті)</i>",
+            parse_mode="HTML"
+        )
+        await self.auto_cleanup(message, sent)
+
+    async def cmd_global_superunreg(self, message: Message):
+        """Постійне вимкнення пінгів у всіх чатах (Premium)"""
+        user_id = str(message.from_user.id)
+        
+        if not self.premium_repo.has_premium(user_id):
+            sent = await message.answer(
+                "❌ <b>Тільки для Premium користувачів!</b>\n\n"
+                "Глобальний SuperUnreg дозволяє вимкнути пінги в усіх чатах назавжди.\n"
+                "Придбати: /premium",
+                parse_mode="HTML"
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        self.chat_repo.add_to_global_unreg(user_id, is_super=True)
+        
+        sent = await message.answer(
+            "🚫 <b>Глобальний SuperUnreg активовано!</b>\n\n"
+            "Ви більше <b>ніколи</b> не отримуватимете пінги в жодному чаті, "
+            "поки не напишете команду /greg або /reg.",
+            parse_mode="HTML"
+        )
+        await self.auto_cleanup(message, sent)
+
+    async def cmd_global_reg(self, message: Message):
+        """Увімкнення пінгів у всіх чатах відразу"""
+        user_id = str(message.from_user.id)
+        
+        removed = self.chat_repo.remove_from_global_unreg(user_id)
+        
+        if removed:
+            sent = await message.answer(
+                "🔔 <b>Глобальні пінги увімкнено!</b>\n\n"
+                "Ви знову отримуватимете сповіщення в усіх чатах."
+            )
+        else:
+            sent = await message.answer("ℹ️ Ви і так отримували глобальні пінги.")
+            
+        await self.auto_cleanup(message, sent)

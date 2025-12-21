@@ -134,6 +134,8 @@ class PingHandler(BaseHandler):
         # Отримуємо налаштування чату
         pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
         first_msg_stop = self.chat_repo.get_setting(clean_chat_id, "first_msg_stop", True)
+        silent_mode = self.chat_repo.get_setting(clean_chat_id, "silent_mode", False)
+        show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
         
         # Динамічні налаштування з урахуванням лімітів
         ping_delay = self.chat_repo.get_setting(clean_chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -157,11 +159,13 @@ class PingHandler(BaseHandler):
             if self.chat_repo.get_stop_flag(clean_chat_id):
                 self.logger.info(f"Виклик зупинено в чаті {clean_chat_id}")
                 try:
-                    await self.bot.send_message(
+                    sent_stop = await self.bot.send_message(
                         chat_id,
                         "⏸ <b>Виклик зупинено</b>",
                         parse_mode="HTML"
                     )
+                    # Чистимо сповіщення про зупинку
+                    await self.auto_cleanup(sent_stop)
                 except:
                     pass
                 break
@@ -194,12 +198,19 @@ class PingHandler(BaseHandler):
                     ]])
                     footer_text = "\n\n(стоп - зупинити)"
                 
+                # Додаємо к-сть якщо увімкнено
+                count_text = f" (👥 {len(user_ids)})" if show_count else ""
+                
                 sent_message = await self.bot.send_message(
                     chat_id,
-                    f"<b>{call_text}</b>\n\n" + " ".join(mentions) + footer_text,
+                    f"<b>{call_text}{count_text}</b>\n\n" + " ".join(mentions) + footer_text,
                     parse_mode="HTML",
-                    reply_markup=keyboard
+                    reply_markup=keyboard,
+                    disable_notification=silent_mode
                 )
+                
+                # Плануємо авточистку для цього повідомлення
+                await self.auto_cleanup(sent_message)
                 
                 # Закріплюємо перше повідомлення
                 if is_first_chunk and pin_enabled:
@@ -238,12 +249,9 @@ class PingHandler(BaseHandler):
         if not users:
             return
         
-        try:
-            await message.delete()
-        except:
-            pass
-        
         await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        # Чистимо саму команду
+        await self.auto_cleanup(message)
     
     async def cmd_emoji(self, message: Message):
         """Пінгує всіх користувачів емодзі"""
@@ -261,12 +269,9 @@ class PingHandler(BaseHandler):
         if not users:
             return
         
-        try:
-            await message.delete()
-        except:
-            pass
-        
         await self._send_pings(message.chat.id, users, call_text, use_emoji=True)
+        # Чистимо саму команду
+        await self.auto_cleanup(message)
     
     async def cmd_admins(self, message: Message):
         """Пінгує тільки адміністраторів"""
@@ -281,15 +286,13 @@ class PingHandler(BaseHandler):
         admin_users = await self._get_admin_users(message.chat.id)
         
         if not admin_users:
-            await message.answer("❌ Не знайдено адміністраторів")
+            sent = await message.answer("❌ Не знайдено адміністраторів")
+            await self.auto_cleanup(message, sent)
             return
         
-        try:
-            await message.delete()
-        except:
-            pass
-        
         await self._send_pings(message.chat.id, admin_users, call_text, use_emoji=False)
+        # Чистимо саму команду
+        await self.auto_cleanup(message)
     
     async def cmd_anybody(self, message: Message):
         """Викликає випадкового учасника"""
@@ -308,19 +311,17 @@ class PingHandler(BaseHandler):
             return
         
         # Вибираємо випадкового
-        random_uid = random.choice(list(users.keys()))
-        random_name = users[random_uid]
+        user_id = random.choice(list(users.keys()))
+        user_name = users[user_id]
         
-        try:
-            await message.delete()
-        except:
-            pass
-        
-        await self.bot.send_message(
-            message.chat.id,
-            f"<b>{call_text}</b>\n\n<a href=\"tg://user?id={random_uid}\">{random_name}</a>",
+        sent = await message.answer(
+            f"🎯 <b>Випадковий учасник:</b> <a href='tg://user?id={user_id}'>{user_name}</a>\n\n"
+            f"💭 {call_text}",
             parse_mode="HTML"
         )
+        
+        # Чистимо команду та результат
+        await self.auto_cleanup(message, sent)
     
     async def cmd_stop(self, message: Message):
         """Зупиняє активний виклик"""
@@ -331,8 +332,8 @@ class PingHandler(BaseHandler):
         
         chat_id = get_clean_chat_id(message.chat.id)
         self.chat_repo.set_stop_flag(chat_id, True)
-        
-        await message.answer("⏸ Зупинка виклику...")
+        sent = await message.answer("⏸ Зупинка виклику...")
+        await self.auto_cleanup(message, sent)
     
     async def cmd_list_templates(self, message: Message):
         """Показує список шаблонів викликів"""
@@ -343,22 +344,21 @@ class PingHandler(BaseHandler):
         templates = self.chat_repo.get_call_templates(chat_id)
         
         if not templates:
-            await message.answer(
+            sent = await message.answer(
                 "📝 <b>Шаблони викликів</b>\n\n"
                 "Немає збережених шаблонів.\n\n"
                 "Додати: <code>!addcpattern назва</code> (у відповідь на повідомлення з текстом)",
                 parse_mode="HTML"
             )
+            await self.auto_cleanup(message, sent)
             return
         
-        text = "📝 <b>Шаблони викликів:</b>\n\n"
-        for name, template_text in templates.items():
-            preview = template_text[:50] + "..." if len(template_text) > 50 else template_text
-            text += f"• <code>{name}</code>: {preview}\n"
-        
-        text += "\n<i>Використання: /all {назва}</i>"
-        
-        await message.answer(text, parse_mode="HTML")
+        template_list = "\n".join([f"• <code>{name}</code>" for name in templates.keys()])
+        sent = await message.answer(
+            f"📋 <b>Шаблони викликів:</b>\n\n{template_list}",
+            parse_mode="HTML"
+        )
+        await self.auto_cleanup(message, sent)
     
     async def cmd_add_template(self, message: Message):
         """Додає шаблон виклику"""
@@ -366,16 +366,18 @@ class PingHandler(BaseHandler):
             return
         
         if not message.reply_to_message or not message.reply_to_message.text:
-            await message.answer(
+            sent = await message.answer(
                 "❌ Використовуйте цю команду у відповідь на повідомлення з текстом шаблону"
             )
+            await self.auto_cleanup(message, sent)
             return
         
         # Отримуємо назву шаблону з команди
         import re
         match = re.search(r'^!addcpattern\s+(\S+)', message.text)
         if not match:
-            await message.answer("❌ Вкажіть назву шаблону")
+            sent = await message.answer("❌ Вкажіть назву шаблону")
+            await self.auto_cleanup(message, sent)
             return
         
         template_name = match.group(1)
@@ -384,11 +386,12 @@ class PingHandler(BaseHandler):
         chat_id = get_clean_chat_id(message.chat.id)
         self.chat_repo.add_call_template(chat_id, template_name, template_text)
         
-        await message.answer(
+        sent = await message.answer(
             f"✅ Шаблон <code>{template_name}</code> додано!\n\n"
             f"Використання: <code>/all {template_name}</code>",
             parse_mode="HTML"
         )
+        await self.auto_cleanup(message, sent)
     
     async def cmd_del_template(self, message: Message):
         """Видаляє шаблон виклику"""
@@ -398,16 +401,18 @@ class PingHandler(BaseHandler):
         import re
         match = re.search(r'^!delcpattern\s+(\S+)', message.text)
         if not match:
-            await message.answer("❌ Вкажіть назву шаблону")
+            sent = await message.answer("❌ Вкажіть назву шаблону")
+            await self.auto_cleanup(message, sent)
             return
         
         template_name = match.group(1)
         chat_id = get_clean_chat_id(message.chat.id)
         
         if self.chat_repo.remove_call_template(chat_id, template_name):
-            await message.answer(f"✅ Шаблон <code>{template_name}</code> видалено", parse_mode="HTML")
+            sent = await message.answer(f"✅ Шаблон <code>{template_name}</code> видалено", parse_mode="HTML")
         else:
-            await message.answer(f"❌ Шаблон <code>{template_name}</code> не знайдено", parse_mode="HTML")
+            sent = await message.answer(f"❌ Шаблон <code>{template_name}</code> не знайдено", parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     # === Call Triggers v1.2.0 ===
     
@@ -420,7 +425,7 @@ class PingHandler(BaseHandler):
         triggers = self.chat_repo.get_call_triggers(chat_id)
         
         if not triggers:
-            await message.answer(
+            sent = await message.answer(
                 "🎯 <b>Тригери викликів</b>\n\n"
                 "Немає створених тригерів.\n\n"
                 "Створити: <code>!addcall назва</code>\n"
@@ -428,16 +433,17 @@ class PingHandler(BaseHandler):
                 "Викликати: <code>!назва</code>",
                 parse_mode="HTML"
             )
+            await self.auto_cleanup(message, sent)
             return
         
-        text = "🎯 <b>Тригери викликів:</b>\n\n"
-        for trigger_name, user_ids in triggers.items():
-            user_count = len(user_ids)
-            text += f"• <code>!{trigger_name}</code> — {user_count} користувачів\n"
-        
-        text += "\n<i>Інфо про тригер: !callinfo назва</i>"
-        
-        await message.answer(text, parse_mode="HTML")
+        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
+        trigger_list = "\n".join([f"• <code>!{name}</code> {emojis.get(name, '')}" for name in triggers.keys()])
+        sent = await message.answer(
+            f"🎯 <b>Групи викликів:</b>\n\n{trigger_list}\n\n"
+            f"ℹ️ Використовуйте <code>!callinfo [назва]</code> для деталі",
+            parse_mode="HTML"
+        )
+        await self.auto_cleanup(message, sent)
     
     async def cmd_trigger_info(self, message: Message):
         """Показує інформацію про тригер"""
@@ -447,7 +453,8 @@ class PingHandler(BaseHandler):
         import re
         match = re.search(r'^!callinfo\s+(\S+)', message.text)
         if not match:
-            await message.answer("❌ Вкажіть назву тригера")
+            sent = await message.answer("❌ Вкажіть назву тригера")
+            await self.auto_cleanup(message, sent)
             return
         
         trigger_name = match.group(1)
@@ -456,27 +463,30 @@ class PingHandler(BaseHandler):
         user_ids = self.chat_repo.get_trigger_users(chat_id, trigger_name)
         
         if not user_ids:
-            await message.answer(
+            sent = await message.answer(
                 f"❌ Тригер <code>!{trigger_name}</code> не знайдено або порожній",
                 parse_mode="HTML"
             )
+            await self.auto_cleanup(message, sent)
             return
         
         # Отримуємо імена користувачів
         chat_data = self.chat_repo.get_chat_data(chat_id)
         all_users = chat_data.get("users", {})
         
-        text = f"🎯 <b>Тригер: !{trigger_name}</b>\n\n"
-        text += f"👥 Користувачів: {len(user_ids)}\n\n"
-        text += "<b>Список:</b>\n"
-        
+        user_list = ""
         for uid in user_ids:
             name = all_users.get(uid, f"User {uid}")
-            text += f"• {name}\n"
+            user_list += f"• {name}\n"
         
-        text += f"\n<i>Виклик: !{trigger_name}</i>"
-        
-        await message.answer(text, parse_mode="HTML")
+        emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
+        info = (
+            f"🎯 <b>Група:</b> !{trigger_name} {emoji}\n"
+            f"👥 Учасників: {len(user_ids)}\n\n"
+            f"<b>Список:</b>\n{user_list}"
+        )
+        sent = await message.answer(info, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
     
     async def cmd_add_trigger(self, message: Message):
         """Створює новий тригер"""
@@ -487,7 +497,8 @@ class PingHandler(BaseHandler):
         # Підтримуємо два формати: !addcall назва або !addcall назва емодзі
         match = re.search(r'^!addcall\s+(\S+)(?:\s+(.+))?', message.text)
         if not match:
-            await message.answer("❌ Вкажіть назву тригера")
+            sent = await message.answer("❌ Вкажіть назву тригера")
+            await self.auto_cleanup(message, sent)
             return
         
         trigger_name = match.group(1)
@@ -499,7 +510,7 @@ class PingHandler(BaseHandler):
             # Якщо вказано емодзі - встановлюємо одразу
             if emoji:
                 self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji)
-                await message.answer(
+                sent = await message.answer(
                     f"✅ Тригер <code>!{trigger_name}</code> створено з емодзі {emoji}!\n\n"
                     f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь на повідомлення)\n"
                     f"Викликати: <code>!{trigger_name}</code>\n"
@@ -507,7 +518,7 @@ class PingHandler(BaseHandler):
                     parse_mode="HTML"
                 )
             else:
-                await message.answer(
+                sent = await message.answer(
                     f"✅ Тригер <code>!{trigger_name}</code> створено!\n\n"
                     f"Встановити емодзі: <code>!set_role_emoji {trigger_name} 🎯</code>\n"
                     f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь на повідомлення)\n"
@@ -515,10 +526,11 @@ class PingHandler(BaseHandler):
                     parse_mode="HTML"
                 )
         else:
-            await message.answer(
+            sent = await message.answer(
                 f"❌ Тригер <code>!{trigger_name}</code> вже існує",
                 parse_mode="HTML"
             )
+        await self.auto_cleanup(message, sent)
     
     async def cmd_del_trigger(self, message: Message):
         """Видаляє тригер"""
@@ -528,22 +540,24 @@ class PingHandler(BaseHandler):
         import re
         match = re.search(r'^!delcall\s+(\S+)', message.text)
         if not match:
-            await message.answer("❌ Вкажіть назву тригера")
+            sent = await message.answer("❌ Вкажіть назву тригера")
+            await self.auto_cleanup(message, sent)
             return
         
         trigger_name = match.group(1)
         chat_id = get_clean_chat_id(message.chat.id)
         
         if self.chat_repo.delete_call_trigger(chat_id, trigger_name):
-            await message.answer(
+            sent = await message.answer(
                 f"✅ Тригер <code>!{trigger_name}</code> видалено",
                 parse_mode="HTML"
             )
         else:
-            await message.answer(
+            sent = await message.answer(
                 f"❌ Тригер <code>!{trigger_name}</code> не знайдено",
                 parse_mode="HTML"
             )
+        await self.auto_cleanup(message, sent)
     
     async def cmd_add_user_to_trigger(self, message: Message):
         """Додає користувача до тригера"""

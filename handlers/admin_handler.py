@@ -81,12 +81,7 @@ class AdminHandler(BaseHandler):
             self.logger.error(f"Sync error: {e}")
             await status.edit_text("❌ Помилка: Не вдалося отримати список.")
         
-        await asyncio.sleep(5)
-        try:
-            await status.delete()
-            await message.delete()
-        except:
-            pass
+        await self.auto_cleanup(message, status)
     
     async def cmd_stats(self, message: Message):
         """Показує статистику чату"""
@@ -106,7 +101,8 @@ class AdminHandler(BaseHandler):
             f"🚫 Постійно вимкнено: {stats['super_unreg']}"
         )
         
-        await message.answer(stats_text, parse_mode="HTML")
+        sent = await message.answer(stats_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent)
         self.logger.info(f"Відправлено статистику: {stats['total']} осіб")
 
     async def cmd_admin_settings(self, message: Message):

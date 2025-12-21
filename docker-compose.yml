@@ -4,9 +4,10 @@ services:
     container_name: my_ping_bot_test
     restart: always
     environment:
-      - BOT_MODE=test  # Тестовий режим
+      - BOT_MODE=test # Тестовий режим
     volumes:
       - ./users_data_test.json:/app/users_data_test.json
+      - ./backups:/app/backups
       - ./account2_session.session:/app/account2_session.session
     logging:
       driver: "json-file"

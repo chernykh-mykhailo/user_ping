@@ -75,6 +75,10 @@ class PingBot:
             self.userbot
         )
         
+        # Реєструємо Middleware (v1.6.0)
+        from core.middleware import ActivityMiddleware
+        self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo))
+        
         self.ping_handler = PingHandler(
             self.chat_repo,
             self.premium_repo,
@@ -134,7 +138,13 @@ class PingBot:
             BotCommand(command="premium", description="👑 Premium меню"),
             BotCommand(command="emoji", description="🤪 Виклик емодзі"),
             BotCommand(command="admins", description="👮 Виклик адмінів"),
-            BotCommand(command="anybody", description="🎲 Випадковий юзер")
+            BotCommand(command="anybody", description="🎲 Випадковий юзер"),
+            BotCommand(command="unreg", description="🔇 Вимкнути пінг (тимчасово)"),
+            BotCommand(command="superunreg", description="🚫 Вимкнути пінг (Premium)"),
+            BotCommand(command="reg", description="🔔 Увімкнути пінг"),
+            BotCommand(command="gunreg", description="🌍 Глобальний анрег (всі чати)"),
+            BotCommand(command="gsuperunreg", description="👑 Глобальний SuperUnreg"),
+            BotCommand(command="greg", description="🔔 Глобальний рег"),
         ]
         
         try:
@@ -146,30 +156,67 @@ class PingBot:
     async def _handle_pending_updates(self):
         """Обробляє накопичені повідомлення після перезапуску"""
         try:
-            # Отримуємо pending updates
-            updates = await self.bot.get_updates(offset=-1, limit=1)
+            # Отримуємо всі накопичені оновлення (до 100)
+            updates = await self.bot.get_updates()
             
-            if updates:
-                last_update = updates[0]
-                
-                # Якщо є повідомлення - відповідаємо на останнє
-                if last_update.message:
-                    try:
+            if not updates:
+                return
+            
+            from utils.helpers import get_clean_chat_id
+            
+            last_update = updates[-1]
+            last_command_update = None
+            
+            # Шукаємо останню команду або звернення серед накопичених
+            # (переглядаємо з кінця, щоб знайти найсвіжішу команду)
+            for upd in reversed(updates):
+                if upd.message and upd.message.text:
+                    text = upd.message.text.strip()
+                    if not text:
+                        continue
+                        
+                    # 1. Перевірка на явний префікс команди
+                    is_command = text.startswith(('/', '!'))
+                    
+                    # 2. Перевірка на кастомні тригери без префіксів
+                    if not is_command:
+                        chat_id = get_clean_chat_id(upd.message.chat.id)
+                        first_word = text.split()[0].lower()
+                        
+                        custom = self.chat_repo.get_custom_ping_triggers(chat_id)
+                        chat_t = self.chat_repo.get_call_triggers(chat_id)
+                        
+                        if first_word in custom or first_word in chat_t:
+                            is_command = True
+                    
+                    if is_command:
+                        last_command_update = upd
+                        break
+            
+            # Якщо знайшли команду - повідомляємо про перезапуск
+            if last_command_update:
+                try:
+                    chat_id = get_clean_chat_id(last_command_update.message.chat.id)
+                    should_notify = self.chat_repo.get_setting(chat_id, "restart_notice", True)
+                    
+                    if should_notify:
                         await self.bot.send_message(
-                            last_update.message.chat.id,
+                            last_command_update.message.chat.id,
                             "🔄 <b>Бот перезапущено!</b>\n\n"
-                            "Якщо ви надсилали команди поки бот був офлайн — будь ласка, повторіть їх.",
+                            "Ви надсилали команду поки бот був офлайн. Будь ласка, <b>повторіть її</b>.",
                             parse_mode="HTML",
-                            reply_to_message_id=last_update.message.message_id
+                            reply_to_message_id=last_command_update.message.message_id
                         )
-                        self.logger.info(f"Sent restart notification to chat {last_update.message.chat.id}")
-                    except Exception as e:
-                        self.logger.warning(f"Failed to send restart notification: {e}")
-                
-                # Пропускаємо всі старі updates
-                await self.bot.get_updates(offset=last_update.update_id + 1)
-                self.logger.info("Skipped pending updates after restart")
-                
+                        self.logger.info(f"Restart notification sent to {last_command_update.message.chat.id}")
+                    else:
+                        self.logger.info(f"Restart notification suppressed by setting in chat {chat_id}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to send restart notification: {e}")
+            
+            # У будь-якому випадку пропускаємо всі старі updates
+            await self.bot.get_updates(offset=last_update.update_id + 1)
+            self.logger.info(f"Skipped {len(updates)} pending updates after restart")
+            
         except Exception as e:
             self.logger.warning(f"Error handling pending updates: {e}")
     

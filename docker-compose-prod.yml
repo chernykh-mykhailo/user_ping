@@ -7,6 +7,7 @@ services:
       - BOT_MODE=prod # Продакшн режим
     volumes:
       - ./users_data.json:/app/users_data.json
+      - ./backups:/app/backups
       - ./account2_session.session:/app/account2_session.session
     logging:
       driver: "json-file"

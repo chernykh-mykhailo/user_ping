@@ -1,13 +1,9 @@
-"""
-Database layer - Repository Pattern (SOLID: SRP, DIP)
-Абстракція для роботи з даними
-"""
 import json
 import os
+import shutil
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
-import secrets
 
 
 class IDatabase(ABC):
@@ -38,8 +34,48 @@ class JSONDatabase(IDatabase):
         return {}
     
     def save(self, data: Dict) -> None:
+        """Зберігає дані та робить бекапи"""
+        # Створюємо папку для бекапів
+        backup_dir = "backups"
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir)
+
+        # 1. Робимо щоденний бекап
+        daily_path = os.path.join(backup_dir, f"daily_{os.path.basename(self.filepath)}")
+        if self._should_backup(daily_path, days=1):
+            self._create_backup(daily_path)
+
+        # 2. Робимо щотижневий бекап
+        weekly_path = os.path.join(backup_dir, f"weekly_{os.path.basename(self.filepath)}")
+        if self._should_backup(weekly_path, days=7):
+            self._create_backup(weekly_path)
+
+        # 3. Основне збереження
         with open(self.filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _should_backup(self, backup_path: str, days: int) -> bool:
+        """Перевіряє чи пора робити новий бекап"""
+        if not os.path.exists(self.filepath):
+            return False
+            
+        if not os.path.exists(backup_path):
+            return True
+            
+        # Отримуємо час останньої зміни бекапу
+        mtime = os.path.getmtime(backup_path)
+        last_backup = datetime.fromtimestamp(mtime)
+        
+        # Якщо пройшло достатньо часу
+        return datetime.now() - last_backup > timedelta(days=days)
+
+    def _create_backup(self, backup_path: str) -> None:
+        """Створює копію файлу"""
+        try:
+            if os.path.exists(self.filepath):
+                shutil.copy2(self.filepath, backup_path)
+        except Exception as e:
+            print(f"Помилка при створенні бекапу {backup_path}: {e}")
 
 
 class ChatRepository:
@@ -60,23 +96,30 @@ class ChatRepository:
             self.db.save(data)
         return data[chat_id]
     
-    def save_user(self, chat_id: str, user_id: str, name: str) -> None:
-        """Зберігає користувача"""
+    def save_user(self, chat_id: str, user_id: str, name: str, update_unreg: bool = True) -> None:
+        """Зберігає користувача та оновлює його ім'я"""
         data = self.db.load()
         
         if chat_id not in data:
             data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
         
         if "users" not in data[chat_id]:
-            data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": []}
+            # Міграція для старих структур
+            if isinstance(data[chat_id], dict) and "users" not in data[chat_id]:
+                data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": []}
         
         # Екранування HTML
         safe_name = name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         data[chat_id]["users"][user_id] = safe_name[:20]
         
-        # Знімаємо тимчасовий анрег якщо користувач написав
-        if user_id in data[chat_id].get("temp_unreg", []):
-            data[chat_id]["temp_unreg"].remove(user_id)
+        if update_unreg:
+            # Знімаємо тимчасовий анрег якщо користувач написав (активність)
+            if user_id in data[chat_id].get("temp_unreg", []):
+                data[chat_id]["temp_unreg"].remove(user_id)
+                
+            # Знімаємо ГЛОБАЛЬНИЙ тимчасовий анрег
+            if "global_unreg" in data and user_id in data["global_unreg"].get("temp", []):
+                data["global_unreg"]["temp"].remove(user_id)
         
         self.db.save(data)
     
@@ -96,9 +139,59 @@ class ChatRepository:
         temp_unreg = set(chat_data.get("temp_unreg", []))
         super_unreg = set(chat_data.get("super_unreg", []))
         
+        # Перевіряємо глобальні анреги
+        data = self.db.load()
+        global_unreg = set(data.get("global_unreg", {}).get("temp", []))
+        global_super = set(data.get("global_unreg", {}).get("super", []))
+        
         return {
             uid: name for uid, name in all_users.items()
-            if uid not in temp_unreg and uid not in super_unreg
+            if uid not in temp_unreg and uid not in super_unreg 
+            and uid not in global_unreg and uid not in global_super
+        }
+
+    def add_to_global_unreg(self, user_id: str, is_super: bool = False) -> None:
+        """Додає користувача до глобального анрегу"""
+        data = self.db.load()
+        if "global_unreg" not in data:
+            data["global_unreg"] = {"temp": [], "super": []}
+            
+        target = "super" if is_super else "temp"
+        other = "temp" if is_super else "super"
+        
+        # Видаляємо з іншого списку, якщо він там є
+        if user_id in data["global_unreg"][other]:
+            data["global_unreg"][other].remove(user_id)
+            
+        if user_id not in data["global_unreg"][target]:
+            data["global_unreg"][target].append(user_id)
+            self.db.save(data)
+
+    def remove_from_global_unreg(self, user_id: str) -> bool:
+        """Видаляє користувача з усіх глобальних анрегів"""
+        data = self.db.load()
+        if "global_unreg" not in data:
+            return False
+            
+        removed = False
+        if user_id in data["global_unreg"].get("temp", []):
+            data["global_unreg"]["temp"].remove(user_id)
+            removed = True
+        if user_id in data["global_unreg"].get("super", []):
+            data["global_unreg"]["super"].remove(user_id)
+            removed = True
+            
+        if removed:
+            self.db.save(data)
+        return removed
+
+    def is_globally_unreg(self, user_id: str) -> Dict[str, bool]:
+        """Перевіряє чи є користувач у глобальних списках"""
+        data = self.db.load()
+        glob = data.get("global_unreg", {})
+        return {
+            "temp": user_id in glob.get("temp", []),
+            "super": user_id in glob.get("super", [])
         }
     
     def add_to_temp_unreg(self, chat_id: str, user_id: str) -> bool:
