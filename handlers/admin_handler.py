@@ -9,7 +9,14 @@ from aiogram.types import Message
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from userbot.collector import UserbotCollector
-from config import ADMIN_USER_ID, PING_LIMITS
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+
+class LoginStates(StatesGroup):
+    waiting_for_phone = State()
+    waiting_for_code = State()
+    waiting_for_password = State()
 
 
 class AdminHandler(BaseHandler):
@@ -38,6 +45,13 @@ class AdminHandler(BaseHandler):
         self.router.message(Command("admin_add_trigger"))(self.cmd_admin_add_trigger)
         self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
         self.router.message(Command("admin_toggle_userbot"))(self.cmd_admin_toggle_userbot)
+        
+        # Userbot Login Flow (v1.7.0)
+        self.router.message(Command("ub_login"))(self.cmd_ub_login)
+        self.router.message(Command("ub_cancel"))(self.cmd_ub_cancel)
+        self.router.message(LoginStates.waiting_for_phone)(self.process_auth_phone)
+        self.router.message(LoginStates.waiting_for_code)(self.process_auth_code)
+        self.router.message(LoginStates.waiting_for_password)(self.process_auth_password)
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -62,42 +76,68 @@ class AdminHandler(BaseHandler):
             return True
     
     async def cmd_sync(self, message: Message):
-        """Синхронізує учасників чату"""
+        """Синхронізує учасників чату (Hybrid: Bot API + Userbot)"""
         self.logger.info(
             f"Отримано команду синхронізації від {message.from_user.id} "
             f"у чаті {message.chat.id}"
         )
         
         if not await self._is_admin(message.chat.id, message.from_user.id):
-            self.logger.warning(f"Користувач {message.from_user.id} не є адміном")
             return
         
-        status = await message.answer("🔄 Синхронізація учасників...")
+        status = await message.answer("🔄 <b>Починаю синхронізацію...</b>", parse_mode="HTML")
+        chat_id = get_clean_chat_id(message.chat.id)
         
         try:
-            # Перевіряємо чи увімкнено юзербота (v1.6.0)
-            # Ми звертаємося до bot.use_userbot (це має бути доступно через атрібут в main.py, 
-            # але краще перевірити напряму через репозиторій або передати стан)
-            # В нашому випадку простіше перевірити через репозиторій
-            is_enabled = self.chat_repo.get_global_setting("use_userbot", True)
-            if not is_enabled:
-                await status.edit_text("❌ Юзербота вимкнено в глобальних налаштуваннях. Синхронізація неможлива.")
-                return
-
-            count = await self.userbot.sync_participants(message.chat.id)
-            await status.edit_text(f"✅ База оновлена! Учасників: {count}")
-            self.logger.info(f"Синхронізація завершена: {count} осіб")
+            # ЕТАП 1: Синхронізація Адміністраторів (Bot API)
+            # Це працює завжди, навіть без юзербота
+            admins = await self.bot.get_chat_administrators(message.chat.id)
+            admin_count = 0
+            for member in admins:
+                if not member.user.is_bot:
+                    user_id = str(member.user.id)
+                    name = member.user.first_name or "Admin"
+                    self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
+                    admin_count += 1
             
-        except Exception as e:
-            self.logger.error(f"Sync error: {e}")
-            if "Userbot not authorized" in str(e):
+            self.logger.info(f"Синхронізовано {admin_count} адмінів через Bot API")
+            
+            # ЕТАП 2: Повна синхронізація (Userbot)
+            is_ub_enabled = self.chat_repo.get_global_setting("use_userbot", True)
+            
+            if is_ub_enabled:
+                await status.edit_text(f"✅ Адміни ({admin_count}) оновлені.\n🛰 <b>Запускаю юзербота для повного збору...</b>", parse_mode="HTML")
+                
+                try:
+                    total_count = await self.userbot.sync_participants(message.chat.id)
+                    await status.edit_text(
+                        f"✅ <b>Синхронізація завершена!</b>\n\n"
+                        f"👥 Всього в базі чату: <b>{total_count}</b>\n"
+                        f"👑 З них адмінів: {admin_count}\n"
+                        f"🛰 Метод: Hybrid (Bot API + Userbot)",
+                        parse_mode="HTML"
+                    )
+                except Exception as ub_err:
+                    self.logger.error(f"Userbot sync error: {ub_err}")
+                    await status.edit_text(
+                        f"⚠️ <b>Часткова синхронізація</b>\n\n"
+                        f"👑 Адміни оновлені: {admin_count}\n"
+                        f"❌ Юзербот не зміг зібрати всіх: <code>{str(ub_err)[:50]}...</code>\n\n"
+                        "<i>Спробуйте !APANEL щоб перевірити статус юзербота.</i>",
+                        parse_mode="HTML"
+                    )
+            else:
                 await status.edit_text(
-                    "❌ <b>Юзербот не авторизований!</b>\n\n"
-                    "Будь ласка, запустіть бота в інтерактивному режимі на сервері, щоб ввести код підтвердження.",
+                    f"✅ <b>Синхронізація завершена!</b>\n\n"
+                    f"👑 Оновлено адмінів: {admin_count}\n"
+                    f"ℹ️ Повний збір пропущено (Юзербот вимкнено).\n\n"
+                    f"<i>Щоб зібрати всіх учасників, увімкніть юзербота в /apanel</i>",
                     parse_mode="HTML"
                 )
-            else:
-                await status.edit_text("❌ Помилка: Не вдалося отримати список.")
+                
+        except Exception as e:
+            self.logger.error(f"General sync error: {e}")
+            await status.edit_text(f"❌ Помилка синхронізації: {e}")
         
         await self.auto_cleanup(message, status)
     
@@ -141,6 +181,7 @@ class AdminHandler(BaseHandler):
                 "📝 <b>Швидкі команди:</b>\n"
                 "• <code>/apanel set_delay 0.5</code>\n"
                 "• <code>/admin_toggle_userbot</code>\n"
+                "• <code>/ub_login</code> — Авторизація\n"
                 "• <code>/ahelp</code> — Всі команди"
             )
             await message.answer(text, parse_mode="HTML")
@@ -170,7 +211,8 @@ class AdminHandler(BaseHandler):
             "<b>Системні:</b>\n"
             "• /apanel — Глобальні налаштування\n"
             "• /sync — Синхронізація (Userbot)\n"
-            "• /admin_toggle_userbot — Вкл/Викл юзербота\n\n"
+            "• /admin_toggle_userbot — Вкл/Викл юзербота\n"
+            "• /ub_login — Авторизація юзербота через чат\n\n"
             "<b>Тригери (Global):</b>\n"
             "• /admin_add_trigger [word] [text/emoji]\n"
             "• /admin_del_trigger [word]\n\n"
@@ -241,3 +283,92 @@ class AdminHandler(BaseHandler):
             f"Тепер ви можете використовувати цей акаунт в іншому місці, якщо він вимкнений.",
             parse_mode="HTML"
         )
+    # === Userbot Login Flow Handlers ===
+
+    async def cmd_ub_login(self, message: Message, state: FSMContext):
+        """Починає процес входу в юзербот"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        await state.set_state(LoginStates.waiting_for_phone)
+        await message.answer(
+            "🛰 <b>АВТОРИЗАЦІЯ ЮЗЕРБОТА</b>\n\n"
+            "Будь ласка, введіть номер телефону в міжнародному форматі:\n"
+            "Приклад: <code>+380501112233</code>\n\n"
+            "<i>Щоб скасувати, напишіть /ub_cancel</i>",
+            parse_mode="HTML"
+        )
+
+    async def cmd_ub_cancel(self, message: Message, state: FSMContext):
+        """Скасовує авторизацію"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        await state.clear()
+        await message.answer("❌ Авторизацію скасовано.")
+
+    async def process_auth_phone(self, message: Message, state: FSMContext):
+        """Обробляє номер телефону"""
+        phone = message.text.strip().replace(" ", "")
+        
+        try:
+            sent_code = await self.userbot.request_phone_code(phone)
+            await state.update_data(
+                phone=phone, 
+                phone_code_hash=sent_code.phone_code_hash
+            )
+            await state.set_state(LoginStates.waiting_for_code)
+            await message.answer(
+                f"✅ Код відправлено на <code>{phone}</code>!\n\n"
+                "Будь ласка, **введіть код** із повідомлення Telegram.\n"
+                "Приклад: `12345`",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            self.logger.error(f"Error requesting code: {e}")
+            await message.answer(f"❌ Помилка при запиті коду: {e}\nСпробуйте знову: /ub_login")
+            await state.clear()
+
+    async def process_auth_code(self, message: Message, state: FSMContext):
+        """Обробляє код підтвердження"""
+        code = message.text.strip().replace(" ", "")
+        data = await state.get_data()
+        
+        try:
+            result = await self.userbot.sign_in_with_code(
+                data['phone'], 
+                code, 
+                data['phone_code_hash']
+            )
+            
+            if result['status'] == 'password_needed':
+                await state.set_state(LoginStates.waiting_for_password)
+                await message.answer(
+                    "🔐 <b>2FA активовано!</b>\n\n"
+                    "Будь ласка, введіть ваш хмарний пароль (Cloud Password):",
+                    parse_mode="HTML"
+                )
+            else:
+                await state.clear()
+                await message.answer("🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
+                await self.userbot.start() # Перезавантажуємо клієнт
+                
+        except Exception as e:
+            self.logger.error(f"Error signing in: {e}")
+            await message.answer(f"❌ Помилка при вході: {e}\nСпробуйте знову: /ub_login")
+            await state.clear()
+
+    async def process_auth_password(self, message: Message, state: FSMContext):
+        """Обробляє 2FA пароль"""
+        password = message.text.strip()
+        
+        try:
+            await self.userbot.sign_in_with_password(password)
+            await state.clear()
+            await message.answer("🎉 <b>Успіх! Юзербот авторизований через 2FA.</b>", parse_mode="HTML")
+            await self.userbot.start()
+            
+        except Exception as e:
+            self.logger.error(f"Error signing in with password: {e}")
+            await message.answer(f"❌ Невірний пароль або інша помилка: {e}\nСпробуйте знову: /ub_login")
+            await state.clear()

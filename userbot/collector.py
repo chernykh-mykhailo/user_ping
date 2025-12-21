@@ -65,14 +65,13 @@ class UserbotCollector:
     async def start(self):
         """
         Запускає userbot (Headless режим)
-        v1.6.4: не запитує код в консолі, якщо сесія не авторизована
         """
         try:
-            await self.client.connect()
+            if not self.client.is_connected():
+                await self.client.connect()
             
             if not await self.client.is_user_authorized():
-                self.logger.warning("Userbot НЕ авторизований! Функції збору учасників будуть недоступні.")
-                self.logger.warning("Для авторизації запустіть бота в інтерактивному режимі.")
+                self.logger.warning("Userbot НЕ авторизований!")
                 return False
                 
             self.logger.info("Userbot успішно підключено та авторизовано")
@@ -80,6 +79,29 @@ class UserbotCollector:
         except Exception as e:
             self.logger.error(f"Помилка підключення Userbot: {e}")
             return False
+
+    # === Login Methods (v1.7.0) ===
+
+    async def request_phone_code(self, phone: str):
+        """Запитує код підтвердження для входу"""
+        if not self.client.is_connected():
+            await self.client.connect()
+        return await self.client.send_code_request(phone)
+
+    async def sign_in_with_code(self, phone: str, code: str, phone_code_hash: str):
+        """Вхід за кодом"""
+        try:
+            await self.client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+            return {"status": "success"}
+        except Exception as e:
+            if "Password" in str(e) or "SessionPasswordNeededError" in str(type(e)):
+                return {"status": "password_needed"}
+            raise e
+
+    async def sign_in_with_password(self, password: str):
+        """Вхід за паролем (2FA)"""
+        await self.client.sign_in(password=password)
+        return {"status": "success"}
     
     async def stop(self):
         """Зупиняє userbot"""
