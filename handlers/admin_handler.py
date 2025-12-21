@@ -320,7 +320,11 @@ class AdminHandler(BaseHandler):
 
     async def process_auth_phone(self, message: Message, state: FSMContext):
         """Обробляє номер телефону"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
         phone = message.text.strip().replace(" ", "")
+        self.logger.info(f"Спроба авторизації юзербота для номера: {phone}")
         
         try:
             sent_code = await self.userbot.request_phone_code(phone)
@@ -331,20 +335,25 @@ class AdminHandler(BaseHandler):
             await state.set_state(LoginStates.waiting_for_code)
             await self._safe_answer(
                 message, 
-                f"✅ Код відправлено на <code>{phone}</code>!\n\n"
-                "Будь ласка, **введіть код** із повідомлення Telegram.\n"
-                "Приклад: `12345`",
-                parse_mode="Markdown"
+                f"✅ <b>Код відправлено на {phone}!</b>\n\n"
+                "Перевірте ваші <b>повідомлення в Telegram</b> (код прийде від сервісного акаунту).\n\n"
+                "Введіть отриманий код нижче:",
+                parse_mode="HTML"
             )
+            self.logger.info(f"Код успішно запитано для {phone}")
         except Exception as e:
-            self.logger.error(f"Error requesting code: {e}")
-            await self._safe_answer(message, f"❌ Помилка при запиті коду: {e}\nСпробуйте знову: /ub_login")
+            self.logger.error(f"Помилка при запиті коду: {e}")
+            await self._safe_answer(message, f"❌ Помилка при запиті коду: <code>{e}</code>\nСпробуйте знову: /ub_login", parse_mode="HTML")
             await state.clear()
 
     async def process_auth_code(self, message: Message, state: FSMContext):
         """Обробляє код підтвердження"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
         code = message.text.strip().replace(" ", "")
         data = await state.get_data()
+        self.logger.info(f"Отримано код від адміна для {data.get('phone')}")
         
         try:
             result = await self.userbot.sign_in_with_code(
