@@ -31,6 +31,7 @@ class UserbotCollector:
     def _register_handlers(self):
         """Реєструє обробники подій"""
         self.client.on(t_events.ChatAction())(self._on_chat_action)
+        self.client.on(t_events.NewMessage())(self._on_new_message)
     
     async def _on_chat_action(self, event):
         """Відстежує вихід або бан користувачів"""
@@ -38,9 +39,28 @@ class UserbotCollector:
             if event.user_id:
                 chat_id = get_clean_chat_id(event.chat_id)
                 user_id = str(event.user_id)
-                
                 self.chat_repo.remove_user(chat_id, user_id)
                 self.logger.info(f"Видалено користувача {user_id} з чату {chat_id}")
+        elif event.user_joined or event.user_added:
+            # При вході нового юзера - одразу ловимо його активність
+            user = await event.get_user()
+            if user and not user.bot:
+                chat_id = get_clean_chat_id(event.chat_id)
+                self.chat_repo.save_user(chat_id, str(user.id), user.first_name or "Учасник")
+
+    async def _on_new_message(self, event):
+        """Відстежує повідомлення для оновлення активності"""
+        if event.is_private:
+            return
+            
+        chat_id = get_clean_chat_id(event.chat_id)
+        sender = await event.get_sender()
+        
+        if sender and hasattr(sender, 'id') and not getattr(sender, 'bot', False):
+            user_id = str(sender.id)
+            name = getattr(sender, 'first_name', "Учасник") or "Учасник"
+            # Оновлюємо activity
+            self.chat_repo.save_user(chat_id, user_id, name)
     
     async def sync_participants(self, chat_id: int) -> int:
         """

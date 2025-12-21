@@ -91,7 +91,7 @@ class PingHandler(BaseHandler):
     async def _get_admin_users(self, chat_id: int) -> dict:
         """Повертає тільки адміністраторів з активних користувачів"""
         clean_chat_id = get_clean_chat_id(chat_id)
-        all_users = self.chat_repo.get_active_users(clean_chat_id)
+        all_users = await self.chat_repo.get_active_users(clean_chat_id)
         
         admin_users = {}
         for uid, name in all_users.items():
@@ -293,7 +293,7 @@ class PingHandler(BaseHandler):
                 call_text = templates[template_name]
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = self.chat_repo.get_active_users(chat_id)
+        users = await self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return
@@ -313,7 +313,7 @@ class PingHandler(BaseHandler):
         call_text = parts[1] if len(parts) > 1 else "📣 Увага!"
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = self.chat_repo.get_active_users(chat_id)
+        users = await self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return
@@ -354,7 +354,7 @@ class PingHandler(BaseHandler):
         call_text = parts[1] if len(parts) > 1 else "🎲 Випадковий учасник:"
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = self.chat_repo.get_active_users(chat_id)
+        users = await self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return
@@ -710,7 +710,7 @@ class PingHandler(BaseHandler):
             # Для ! trigger без тексту використовуємо дефолтний
             call_text = "📣 Увага!"
             
-            users = self.chat_repo.get_active_users(chat_id)
+            users = await self.chat_repo.get_active_users(chat_id)
             if not users:
                 return
                 
@@ -732,14 +732,13 @@ class PingHandler(BaseHandler):
             # Тихо ігноруємо, якщо тригер не знайдено
             return
         
-        # Отримуємо імена користувачів
-        chat_data = self.chat_repo.get_chat_data(chat_id)
-        all_users = chat_data.get("users", {})
+        # Отримуємо імена користувачів (враховуючи сортування за активністю)
+        all_users = await self.chat_repo.get_active_users(chat_id)
         
         trigger_users = {}
-        for uid in user_ids:
-            if uid in all_users:
-                trigger_users[uid] = all_users[uid]
+        for uid, name in all_users.items():
+            if uid in user_ids:
+                trigger_users[uid] = name
         
         if not trigger_users:
             await message.answer(f"❌ Тригер <code>!{trigger_name}</code> порожній", parse_mode="HTML")
@@ -1067,7 +1066,7 @@ class PingHandler(BaseHandler):
             call_text = parts[1] if len(parts) > 1 else ("📣 Увага!" if found_type == "text" else "📣 Увага!")
             
             # Execute Ping
-            users = self.chat_repo.get_active_users(chat_id)
+            users = await self.chat_repo.get_active_users(chat_id)
             if not users:
                 return
                 

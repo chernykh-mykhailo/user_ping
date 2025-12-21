@@ -23,18 +23,38 @@ class JSONDatabase(IDatabase):
     
     def __init__(self, filepath: str):
         self.filepath = filepath
+        self._cache = None
+        self._last_save = 0
     
     def load(self) -> Dict:
+        """Повертає дані з кешу або читає з диска"""
+        if self._cache is not None:
+            return self._cache
+
         if os.path.exists(self.filepath) and os.path.getsize(self.filepath) > 0:
             with open(self.filepath, "r", encoding="utf-8") as f:
                 try:
-                    return json.load(f)
+                    self._cache = json.load(f)
+                    return self._cache
                 except json.JSONDecodeError:
+                    self._cache = {}
                     return {}
+        self._cache = {}
         return {}
     
-    def save(self, data: Dict) -> None:
-        """Зберігає дані та робить бекапи"""
+    def save(self, data: Dict, force: bool = False) -> None:
+        """Зберігає дані в кеш і періодично на диск"""
+        self._cache = data
+        
+        # Якщо force=True або пройшло більше 10 секунд з останнього збереження
+        import time
+        current_time = time.time()
+        
+        if not force and (current_time - self._last_save) < 10:
+            return
+
+        self._last_save = current_time
+        
         # Створюємо папку для бекапів
         backup_dir = "backups"
         if not os.path.exists(backup_dir):
@@ -44,11 +64,6 @@ class JSONDatabase(IDatabase):
         daily_path = os.path.join(backup_dir, f"daily_{os.path.basename(self.filepath)}")
         if self._should_backup(daily_path, days=1):
             self._create_backup(daily_path)
-
-        # 2. Робимо щотижневий бекап
-        weekly_path = os.path.join(backup_dir, f"weekly_{os.path.basename(self.filepath)}")
-        if self._should_backup(weekly_path, days=7):
-            self._create_backup(weekly_path)
 
         # 3. Основне збереження
         with open(self.filepath, "w", encoding="utf-8") as f:
@@ -110,7 +125,24 @@ class ChatRepository:
         
         # Екранування HTML
         safe_name = name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        data[chat_id]["users"][user_id] = safe_name[:20]
+        
+        # Оновлюємо дані користувача
+        now = datetime.now()
+        
+        # v1.7.0 Throttle: не оновлюємо частіше ніж раз на 5 хвилин
+        if user_id in data[chat_id]["users"]:
+            old_val = data[chat_id]["users"][user_id]
+            if isinstance(old_val, dict) and "last_seen" in old_val:
+                last_seen = datetime.fromisoformat(old_val["last_seen"])
+                if (now - last_seen).total_seconds() < 300: # 5 хвилин
+                    return # Скіпаємо запис, людина і так "свіжа"
+
+        user_data = {
+            "name": safe_name[:20],
+            "last_seen": now.isoformat()
+        }
+        
+        data[chat_id]["users"][user_id] = user_data
         
         if update_unreg:
             # Знімаємо тимчасовий анрег якщо користувач написав (активність)
@@ -131,24 +163,34 @@ class ChatRepository:
                 del data[chat_id]["users"][user_id]
                 self.db.save(data)
     
-    def get_active_users(self, chat_id: str) -> Dict[str, str]:
-        """Повертає активних користувачів (без анрегів)"""
+    async def get_active_users(self, chat_id: str) -> Dict[str, str]:
+        """Повертає активних користувачів (без анрегів), відсортованих за активністю"""
         chat_data = self.get_chat_data(chat_id)
         
-        all_users = chat_data.get("users", {})
+        all_users_raw = chat_data.get("users", {})
         temp_unreg = set(chat_data.get("temp_unreg", []))
         super_unreg = set(chat_data.get("super_unreg", []))
         
         # Перевіряємо глобальні анреги
-        data = self.db.load()
-        global_unreg = set(data.get("global_unreg", {}).get("temp", []))
-        global_super = set(data.get("global_unreg", {}).get("super", []))
+        db_data = self.db.load()
+        global_unreg = set(db_data.get("global_unreg", {}).get("temp", []))
+        global_super = set(db_data.get("global_unreg", {}).get("super", []))
         
-        return {
-            uid: name for uid, name in all_users.items()
-            if uid not in temp_unreg and uid not in super_unreg 
-            and uid not in global_unreg and uid not in global_super
-        }
+        # Фільтруємо анреги
+        active_list = []
+        for uid, val in all_users_raw.items():
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                continue
+            
+            # Обробляємо і старий, і новий формат
+            name = val["name"] if isinstance(val, dict) else val
+            last_seen = val.get("last_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            active_list.append((uid, name, last_seen))
+            
+        # Сортуємо: свіжі таунспампи спочатку
+        active_list.sort(key=lambda x: x[2], reverse=True)
+        
+        return {uid: name for uid, name, _ in active_list}
 
     def add_to_global_unreg(self, user_id: str, is_super: bool = False) -> None:
         """Додає користувача до глобального анрегу"""
