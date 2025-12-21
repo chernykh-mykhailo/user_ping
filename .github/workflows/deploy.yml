@@ -41,10 +41,12 @@ jobs:
               echo "Directory empty or not a git repo. Syncing..."
               mkdir -p "$PROJECT_PATH"
               cd "$PROJECT_PATH"
-              git clone https://github.com/${{ github.repository }}.git .
+              git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git .
             else
               echo "Pulling latest changes..."
               cd "$PROJECT_PATH"
+              # Update remote URL to include token just in case
+              git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
               git pull origin main
             fi
             
