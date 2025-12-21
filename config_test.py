@@ -10,8 +10,9 @@ API_HASH = os.getenv('API_HASH', '')
 SESSION_NAME = os.getenv('SESSION_NAME', 'account2_session')
 
 # ТЕСТОВИЙ БОТ
-BOT_TOKEN = os.getenv('TEST_BOT_TOKEN', '')
-PAYMENT_TOKEN = os.getenv('TEST_PAYMENT_TOKEN', '')
+# Спочатку шукаємо специфічний для тесту токен, якщо немає - беремо загальний BOT_TOKEN
+BOT_TOKEN = os.getenv('TEST_BOT_TOKEN') or os.getenv('BOT_TOKEN', '')
+PAYMENT_TOKEN = os.getenv('TEST_PAYMENT_TOKEN') or os.getenv('PAYMENT_TOKEN', '')
 
 # === ADMIN ===
 ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0'))

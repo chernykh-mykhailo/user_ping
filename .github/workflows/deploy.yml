@@ -23,19 +23,19 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         env:
-          TARGET: ${{ github.event.inputs.target || 'test' }}
+          DEPLOY_TARGET: ${{ github.event.inputs.target || 'test' }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT || 22 }}
-          envs: ENV_FILE,TARGET
+          envs: ENV_FILE,DEPLOY_TARGET
           script: |
             set -e
             PROJECT_PATH="${{ secrets.PROJECT_PATH || '/root/projects/mafia/user_ping' }}"
             
             echo "Target path: $PROJECT_PATH"
-            echo "Deploying environment: $TARGET"
+            echo "Deploying environment: $DEPLOY_TARGET"
             
             if [ ! -d "$PROJECT_PATH/.git" ]; then
               echo "Directory empty or not a git repo. Syncing..."
@@ -54,11 +54,11 @@ jobs:
             # Restore .env file from Secrets
             echo "$ENV_FILE" > "$PROJECT_PATH/.env"
             
-            echo "Restarting containers for: $TARGET"
+            echo "Restarting containers for: $DEPLOY_TARGET"
             
-            if [ "$TARGET" == "test" ]; then
+            if [ "$DEPLOY_TARGET" == "test" ]; then
               docker compose up -d --build
-            elif [ "$TARGET" == "prod" ]; then
+            elif [ "$DEPLOY_TARGET" == "prod" ]; then
               docker compose -f docker-compose-prod.yml up -d --build
             else
               docker compose -f docker-compose-prod.yml up -d --build
@@ -66,4 +66,4 @@ jobs:
             fi
             
             docker image prune -f
-            echo "Deployment to $TARGET finished successfully!"
+            echo "Deployment to $DEPLOY_TARGET finished successfully!"
