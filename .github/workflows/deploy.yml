@@ -58,12 +58,12 @@ jobs:
             echo "Restarting containers for: $DEPLOY_TARGET"
             
             if [ "$DEPLOY_TARGET" == "test" ]; then
-              docker compose up -d --build
+              docker compose -p user-ping-test up -d --build
             elif [ "$DEPLOY_TARGET" == "prod" ]; then
-              docker compose -f docker-compose-prod.yml up -d --build
+              docker compose -p user-ping-prod -f docker-compose-prod.yml up -d --build
             else
-              docker compose -f docker-compose-prod.yml up -d --build
-              docker compose up -d --build
+              docker compose -p user-ping-prod -f docker-compose-prod.yml up -d --build
+              docker compose -p user-ping-test up -d --build
             fi
             
             docker image prune -f
