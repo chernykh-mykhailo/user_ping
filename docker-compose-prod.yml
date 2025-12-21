@@ -1,5 +1,5 @@
 services:
-  ping-bot:
+  ping-bot-prod:
     build: .
     container_name: my_ping_bot_prod
     restart: always
