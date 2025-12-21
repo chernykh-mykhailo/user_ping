@@ -5,6 +5,8 @@ services:
     restart: always
     environment:
       - BOT_MODE=prod # Продакшн режим
+    env_file:
+      - .env
     volumes:
       - ./users_data.json:/app/users_data.json
       - ./backups:/app/backups

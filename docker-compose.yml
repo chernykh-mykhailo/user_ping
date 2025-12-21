@@ -5,6 +5,8 @@ services:
     restart: always
     environment:
       - BOT_MODE=test # Тестовий режим
+    env_file:
+      - .env
     volumes:
       - ./users_data_test.json:/app/users_data_test.json
       - ./backups:/app/backups
