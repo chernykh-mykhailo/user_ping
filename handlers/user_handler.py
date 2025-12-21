@@ -8,7 +8,11 @@ from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
-from config import PREMIUM_PLANS, CHAT_PREMIUM_PLANS, FEEDBACK_BOT, PROJECTS_CHANNEL, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM
+from config import (
+    PREMIUM_PLANS, CHAT_PREMIUM_PLANS, FEEDBACK_BOT, 
+    PROJECTS_CHANNEL, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM,
+    ADMIN_USER_ID
+)
 from __version__ import __version__
 from aiogram.exceptions import TelegramBadRequest
 
@@ -307,12 +311,18 @@ class UserHandler(BaseHandler):
                 "• <code>/settings</code> — Головне меню налаштувань (кнопка нижче)\n\n"
                 "<b>Базові команди:</b>\n"
                 "• <code>!збір</code> або /sync — Оновити базу користувачів\n"
-                "• <code>!стата</code> або /stats — Статистика чату\n\n"
-                "<b>Адмін-команди Premium:</b>\n"
-                "• /admin_grant_premium user_id days\n"
-                "• /admin_revoke_premium user_id\n"
-                "• /admin_add_payment user_id amount"
+                "• <code>!стата</code> або /stats — Статистика чату\n"
             )
+            
+            # Додаємо команди власника (v1.6.0)
+            if callback.from_user.id == ADMIN_USER_ID:
+                text += (
+                    "\n👑 <b>Адмін-команди (Owner Only):</b>\n"
+                    "• /admin_grant_premium user_id days\n"
+                    "• /admin_revoke_premium user_id\n"
+                    "• /admin_add_payment user_id amount\n"
+                    "• /admin_toggle_userbot — Перемкнути юзербота"
+                )
             
             # Додаємо кнопку налаштувань прямо сюди для зручності
             mgmt_kb = [

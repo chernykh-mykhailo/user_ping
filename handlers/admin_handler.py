@@ -33,7 +33,8 @@ class AdminHandler(BaseHandler):
         self.router.message(F.text.regexp(r'^!?стата', flags=0))(self.cmd_stats)
         
         
-        self.router.message(Command("admin_settings"))(self.cmd_admin_settings)
+        self.router.message(Command("admin_settings", "apanel"))(self.cmd_admin_settings)
+        self.router.message(Command("ahelp"))(self.cmd_ahelp)
         self.router.message(Command("admin_add_trigger"))(self.cmd_admin_add_trigger)
         self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
         self.router.message(Command("admin_toggle_userbot"))(self.cmd_admin_toggle_userbot)
@@ -125,14 +126,17 @@ class AdminHandler(BaseHandler):
             current_delay = self.chat_repo.get_global_setting("ping_delay", PING_LIMITS["default_delay"])
             use_ub = self.chat_repo.get_global_setting("use_userbot", True)
             
-            await message.answer(
-                f"⚙️ <b>Global Settings</b>\n\n"
-                f"• Delay: {current_delay}s\n"
-                f"• Userbot: {'✅ ON' if use_ub else '❌ OFF'}\n\n"
-                f"Usage:\n"
-                f"<code>/admin_settings set_delay 0.5</code>\n"
-                f"<code>/admin_toggle_userbot</code>"
+            text = (
+                "🖥 <b>ГЛОБАЛЬНА ПАНЕЛЬ КЕРУВАННЯ</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🛰 <b>Статус Юзербота:</b> {'✅ ПРАЦЮЄ' if use_ub else '❌ ВИМКНЕНО'}\n"
+                f"⚡️ <b>Затримка (Global):</b> <code>{current_delay}s</code>\n\n"
+                "📝 <b>Швидкі команди:</b>\n"
+                "• <code>/apanel set_delay 0.5</code>\n"
+                "• <code>/admin_toggle_userbot</code>\n"
+                "• <code>/ahelp</code> — Всі команди"
             )
+            await message.answer(text, parse_mode="HTML")
             return
             
         action = args[1]
@@ -145,9 +149,30 @@ class AdminHandler(BaseHandler):
                 if delay > PING_LIMITS["max_delay"]: delay = PING_LIMITS["max_delay"]
                 
                 self.chat_repo.set_global_setting("ping_delay", delay)
-                await message.answer(f"✅ Global Delay set to {delay}s")
+                await message.answer(f"✅ <b>Global Delay встановлено:</b> {delay}s", parse_mode="HTML")
             except ValueError:
-                await message.answer("❌ Invalid number")
+                await message.answer("❌ Введіть коректне число (наприклад: 0.5)")
+
+    async def cmd_ahelp(self, message: Message):
+        """Швидка допомога для власника"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        help_text = (
+            "👑 <b>Admin Help Panel</b>\n\n"
+            "<b>Системні:</b>\n"
+            "• /apanel — Глобальні налаштування\n"
+            "• /sync — Синхронізація (Userbot)\n"
+            "• /admin_toggle_userbot — Вкл/Викл юзербота\n\n"
+            "<b>Тригери (Global):</b>\n"
+            "• /admin_add_trigger [word] [text/emoji]\n"
+            "• /admin_del_trigger [word]\n\n"
+            "<b>Premium:</b>\n"
+            "• /admin_grant_premium [user_id] [days]\n"
+            "• /admin_revoke_premium [user_id]\n"
+            "• /admin_add_payment [user_id] [amount]"
+        )
+        await message.answer(help_text, parse_mode="HTML")
 
     async def cmd_admin_add_trigger(self, message: Message):
         """Додає глобальний тригер (Owner only)"""
