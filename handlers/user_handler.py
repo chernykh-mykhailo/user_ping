@@ -179,6 +179,12 @@ class UserHandler(BaseHandler):
     async def callback_help_section(self, callback: CallbackQuery):
         """Обробляє вибір розділу довідки"""
         section = callback.data.replace("help_", "")
+        self.logger.info(f"Help section requested: {section} by {callback.from_user.id}")
+        
+        try:
+            await callback.answer()
+        except:
+            pass
         
         # Кнопка "Назад"
         back_button = InlineKeyboardMarkup(inline_keyboard=[
@@ -186,9 +192,10 @@ class UserHandler(BaseHandler):
         ])
         
         if section == "main":
-            await callback.message.edit_text(
+            help_text = (
                 f"<b>📋 Довідка бота v{__version__}</b>\n\n"
-                "Оберіть розділ для детальної інформації:\n\n"
+                "Оберіть розділ для детальної інформації.\n\n"
+                "⚠️ <b>Порада:</b> Для стабільної роботи (авточистка, пін) надайте боту права <b>Адміністратора</b> (видалення та закріплення).\n\n"
                 "📢 <b>Пінги</b> — Виклики користувачів\n"
                 "🎯 <b>Тригери</b> — Вибіркові виклики груп\n"
                 "🎮 <b>Панель ролей</b> — Самореєстрація\n"
@@ -197,7 +204,10 @@ class UserHandler(BaseHandler):
                 "👑 <b>Premium</b> — Преміум функції\n\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "💬 Зв'язок: /feedback\n"
-                f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>",
+                f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>"
+            )
+            await callback.message.edit_text(
+                help_text,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="📢 Пінги", callback_data="help_pings"),
@@ -293,19 +303,31 @@ class UserHandler(BaseHandler):
         elif section == "management":
             text = (
                 "<b>⚙️ Керування</b>\n\n"
+                "<b>Адмін-панель:</b>\n"
+                "• <code>/settings</code> — Головне меню налаштувань (кнопка нижче)\n\n"
                 "<b>Базові команди:</b>\n"
                 "• <code>!збір</code> або /sync — Оновити базу користувачів\n"
                 "• <code>!стата</code> або /stats — Статистика чату\n\n"
-                "<b>Налаштування чату (Адмін):</b>\n"
-                "• /settings — Панель налаштувань\n"
-                "  (Швидкість, Закріплення повідомлень, Кнопка стоп)\n\n"
                 "<b>Адмін-команди Premium:</b>\n"
-                "• /admin_grant_premium <user_id> <days>\n"
-                "• /admin_revoke_premium <user_id>\n"
-                "• /admin_add_payment <user_id> <amount>\n"
-                "• /admin_payments <user_id>"
+                "• /admin_grant_premium user_id days\n"
+                "• /admin_revoke_premium user_id\n"
+                "• /admin_add_payment user_id amount"
             )
-            await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+            
+            # Додаємо кнопку налаштувань прямо сюди для зручності
+            mgmt_kb = [
+                [InlineKeyboardButton(text="⚙️ Налаштування чату", callback_data="settings_location_chat_0_0")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="help_main")]
+            ]
+            # Ховаємо кнопку налаштувань в ЛС, бо вона там не працює
+            if callback.message.chat.type == "private":
+                mgmt_kb.pop(0)
+
+            await callback.message.edit_text(
+                text, 
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=mgmt_kb), 
+                parse_mode="HTML"
+            )
         
         elif section == "premium":
             text = (
@@ -337,13 +359,6 @@ class UserHandler(BaseHandler):
                 f"• /refund — Повернення"
             )
             await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
-        
-        try:
-            await callback.answer()
-        except TelegramBadRequest:
-            pass
-        except Exception as e:
-            self.logger.warning(f"Error answering callback: {e}")
 
     
     async def cmd_feedback(self, message: Message):

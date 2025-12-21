@@ -3,7 +3,7 @@ name: Deploy Bot
 on:
   push:
     branches:
-      - main  # або master, залежно від вашої гілки
+      - main
 
 jobs:
   deploy:
@@ -14,9 +14,34 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT || 22 }}
           script: |
-            cd /path/to/your/bot  # ТУТ ТРЕБА ВКАЗАТИ ШЛЯХ ДО БОТА НА СЕРВЕРІ
-            git pull origin main
-            docker compose -f docker-compose-prod.yml up -d --build
-            docker image prune -f  # Очистити старі образи, щоб не займали місце
+            set -e
+            PROJECT_PATH="${{ secrets.PROJECT_PATH || '/root/projects/mafia/user_ping' }}"
+            
+            echo "Target path: $PROJECT_PATH"
+            
+            if [ ! -d "$PROJECT_PATH/.git" ]; then
+              echo "Directory empty or not a git repo. Syncing..."
+              mkdir -p "$PROJECT_PATH"
+              cd "$PROJECT_PATH"
+              git clone https://github.com/${{ github.repository }}.git .
+            else
+              echo "Pulling latest changes..."
+              cd "$PROJECT_PATH"
+              git pull origin main
+            fi
+            
+            echo "Restarting containers..."
+            # Try both docker compose (v2) and docker-compose (v1)
+            if docker compose version > /dev/null 2>&1; then
+              docker compose -f docker-compose-prod.yml up -d --build
+              docker compose up -d --build
+            else
+              docker-compose -f docker-compose-prod.yml up -d --build
+              docker-compose up -d --build
+            fi
+            
+            docker image prune -f
+            echo "Deployment finished successfully!"

@@ -2,11 +2,23 @@
 Version information for Telegram Ping Bot
 """
 
-__version__ = "1.4.0"
-__version_info__ = (1, 4, 0)
+__version__ = "1.6.0"
+__version_info__ = (1, 6, 0)
 
 # Changelog
 CHANGELOG = {
+    "1.6.0": [
+        "🔄 Activity detection moved to Main Bot (requires Privacy Mode OFF)",
+        "🛡 Admin Rights awareness (warnings about missing Delete/Pin rights)",
+        "🧹 Centralized activity tracking via Middleware",
+        "📄 PROMO.md with advertising materials"
+    ],
+    "1.5.0": [
+        "🌐 Global Unreg/SuperUnreg — manage privacy across all chats",
+        "📢 Restart Notification toggle in settings",
+        "🚀 Automated Deployment via GitHub Actions",
+        "🔧 Improved name extraction during synchronization"
+    ],
     "1.4.0": [
         "💰 Chat Premium — підписка для всього чату (всі адміни отримують Premium)",
         "🎁 Gift Premium — подаруйте Premium друзям",

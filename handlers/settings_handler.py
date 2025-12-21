@@ -81,11 +81,26 @@ class SettingsHandler(BaseHandler):
         parts = callback.data.split("_")
         # settings_location_dm_123456_789
         location = parts[2]  # dm або chat
-        owner_id = int(parts[3])
-        original_chat_id = parts[4]
         
-        # Перевірка чи це власник кнопки
-        if callback.from_user.id != owner_id:
+        # Визначаємо owner_id та chat_id з підтримкою фолбеку (v1.6.0)
+        owner_id = int(parts[3])
+        if owner_id == 0:
+            owner_id = callback.from_user.id
+            
+        original_chat_id = parts[4]
+        if original_chat_id == "0":
+            original_chat_id = get_clean_chat_id(callback.message.chat.id)
+        
+        # Перевірка чи це власник кнопки (якщо в parts[3] був 0 - ми дозволили поточного юзера)
+        # Але для безпеки перевіримо адмін-права якщо це shortcut з Help
+        if parts[3] == "0":
+            if not await self._is_admin(callback.message.chat.id, callback.from_user.id, callback.bot):
+                try:
+                    await callback.answer("❌ Тільки адміни!", show_alert=True)
+                except TelegramBadRequest:
+                    pass
+                return
+        elif callback.from_user.id != owner_id:
             try:
                 await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
             except TelegramBadRequest:
@@ -349,8 +364,8 @@ class SettingsHandler(BaseHandler):
             owner_id = int(owner_id_str)
             setting_key = prefix_part.replace("toggle_", "")
             
-            # Перевірка власника
-            if callback.from_user.id != owner_id:
+            # Перевірка власника (якщо owner_id == 0 - будь-який адмін)
+            if owner_id != 0 and callback.from_user.id != owner_id:
                 try:
                     await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
                 except TelegramBadRequest:
@@ -391,7 +406,7 @@ class SettingsHandler(BaseHandler):
             _, _, owner_id_str, chat_id = data.rsplit("_", 3) # change_speed_owner_chat
             owner_id = int(owner_id_str)
             
-            if callback.from_user.id != owner_id:
+            if owner_id != 0 and callback.from_user.id != owner_id:
                 try:
                     await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
                 except TelegramBadRequest:
@@ -443,7 +458,7 @@ class SettingsHandler(BaseHandler):
             _, speed_str, owner_id_str, chat_id = parts
             owner_id = int(owner_id_str)
             
-            if callback.from_user.id != owner_id:
+            if owner_id != 0 and callback.from_user.id != owner_id:
                 try:
                     await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
                 except TelegramBadRequest:
@@ -484,7 +499,7 @@ class SettingsHandler(BaseHandler):
             _, _, owner_id_str, chat_id = data.rsplit("_", 3)
             owner_id = int(owner_id_str)
             
-            if callback.from_user.id != owner_id:
+            if owner_id != 0 and callback.from_user.id != owner_id:
                 try:
                     await callback.answer("❌ Ці налаштування не для вас!", show_alert=True)
                 except TelegramBadRequest:
