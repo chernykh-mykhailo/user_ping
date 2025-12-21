@@ -24,6 +24,7 @@ jobs:
         uses: appleboy/ssh-action@master
         env:
           DEPLOY_TARGET: ${{ github.event.inputs.target || 'test' }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
