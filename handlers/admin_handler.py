@@ -9,12 +9,14 @@ from aiogram.types import Message
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from userbot.collector import UserbotCollector
-from config import ADMIN_USER_ID, PING_LIMITS
+from config import ADMIN_USER_ID, PING_LIMITS, UB_ACCOUNTS
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 
 class LoginStates(StatesGroup):
+    waiting_for_account = State()
     waiting_for_phone = State()
     waiting_for_code = State()
     waiting_for_password = State()
@@ -49,6 +51,7 @@ class AdminHandler(BaseHandler):
         
         # Userbot Login Flow (v1.7.0)
         self.router.message(Command("ub_login"))(self.cmd_ub_login)
+        self.router.callback_query(F.data.startswith("ub_acc_"))(self.process_account_selection)
         self.router.message(Command("ub_cancel"))(self.cmd_ub_cancel)
         self.router.message(LoginStates.waiting_for_phone)(self.process_auth_phone)
         self.router.message(LoginStates.waiting_for_code)(self.process_auth_code)
@@ -296,14 +299,59 @@ class AdminHandler(BaseHandler):
     # === Userbot Login Flow Handlers ===
 
     async def cmd_ub_login(self, message: Message, state: FSMContext):
-        """Починає процес входу в юзербот"""
+        """Починає процес авторизації юзербота (v1.7.0)"""
         if message.from_user.id != ADMIN_USER_ID:
             return
             
-        await state.set_state(LoginStates.waiting_for_phone)
+        await state.set_state(LoginStates.waiting_for_account)
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="👤 Акаунт 2 (Старий)", callback_data="ub_acc_account2")],
+            [InlineKeyboardButton(text="👤 Акаунт 3 (Новий)", callback_data="ub_acc_account3")],
+            [InlineKeyboardButton(text="❌ Скасувати", callback_data="ub_acc_cancel")]
+        ])
+        
         await self._safe_answer(
             message,
-            "🛰 <b>АВТОРИЗАЦІЯ ЮЗЕРБОТА</b>\n\n"
+            "🛰 <b>ВИБІР АКАУНТА ЮЗЕРБОТА</b>\n\n"
+            "Оберіть акаунт, який хочете авторизувати. Кожен акаунт має свій API ID та файл сесії.\n\n"
+            "<i>Акаунт 2 — той, що мав проблеми з Email (можна спробувати пізніше).</i>\n"
+            "<i>Акаунт 3 — новий чистий акаунт.</i>",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+    async def process_account_selection(self, callback: CallbackQuery, state: FSMContext):
+        """Обробляє вибір акаунта"""
+        if callback.from_user.id != ADMIN_USER_ID:
+            return
+            
+        account_id = callback.data.replace("ub_acc_", "")
+        
+        if account_id == "cancel":
+            await state.clear()
+            await callback.message.edit_text("❌ Авторизацію скасовано.")
+            return
+            
+        acc_config = UB_ACCOUNTS.get(account_id)
+        if not acc_config:
+            await callback.answer("❌ Помилка конфігурації акаунта")
+            return
+            
+        # Зберігаємо обраний акаунт у стані
+        await state.update_data(acc_id=account_id, acc_config=acc_config)
+        
+        # Перемикаємо клієнт на льоту!
+        await callback.message.edit_text(f"⏳ Перемикаюся на <b>{account_id}</b>...", parse_mode="HTML")
+        await self.userbot.switch_account(
+            api_id=acc_config['api_id'],
+            api_hash=acc_config['api_hash'],
+            session_name=acc_config['session']
+        )
+        
+        await state.set_state(LoginStates.waiting_for_phone)
+        await callback.message.edit_text(
+            f"🛰 <b>АВТОРИЗАЦІЯ: {account_id.upper()}</b>\n\n"
             "Будь ласка, введіть номер телефону в міжнародному форматі:\n"
             "Приклад: <code>+380501112233</code>\n\n"
             "<i>Щоб скасувати, напишіть /ub_cancel</i>",

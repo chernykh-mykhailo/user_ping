@@ -7,8 +7,22 @@ from dataclasses import dataclass
 # === API CREDENTIALS ===
 API_ID = int(os.getenv('API_ID', '0'))
 API_HASH = os.getenv('API_HASH', '')
-SESSION_NAME = os.getenv('TEST_SESSION_NAME', 'account2_session_test')
+SESSION_NAME = os.getenv('SESSION_NAME', 'account3_session') + "_test"
 USE_USERBOT = os.getenv('USE_USERBOT', 'True').lower() == 'true'
+
+# Доступні акаунти для вибору (v1.7.0)
+UB_ACCOUNTS = {
+    "account2": {
+        "api_id": int(os.getenv('ACCOUNT2_API_ID', '0')),
+        "api_hash": os.getenv('ACCOUNT2_API_HASH', ''),
+        "session": os.getenv('ACCOUNT2_SESSION', 'account2_session') + "_test"
+    },
+    "account3": {
+        "api_id": int(os.getenv('ACCOUNT3_API_ID', '0')),
+        "api_hash": os.getenv('ACCOUNT3_API_HASH', ''),
+        "session": os.getenv('ACCOUNT3_SESSION', 'account3_session') + "_test"
+    }
+}
 
 # ТЕСТОВИЙ БОТ
 # Спочатку шукаємо специфічний для тесту токен, якщо немає - беремо загальний BOT_TOKEN

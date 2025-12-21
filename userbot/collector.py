@@ -111,10 +111,18 @@ class UserbotCollector:
     async def stop(self):
         """Зупиняє userbot"""
         try:
-            if self.client.is_connected():
+            if self.client and self.client.is_connected():
                 # Даємо час фоновим задачам завершитись
                 await asyncio.sleep(1)
                 await self.client.disconnect()
                 self.logger.info("Userbot зупинено успішно")
         except Exception as e:
             self.logger.error(f"Помилка при зупинці Userbot: {e}")
+
+    async def switch_account(self, api_id: int, api_hash: str, session_name: str):
+        """Перемикає акаунт юзербота (v1.7.0)"""
+        await self.stop()
+        self.client = TelegramClient(session_name, api_id, api_hash)
+        self._register_handlers()
+        self.logger.info(f"Юзербот перемкнуто на сесію: {session_name}")
+        return await self.start()
