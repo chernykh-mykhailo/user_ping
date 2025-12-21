@@ -29,7 +29,7 @@ DB_FILE = "users_data_test.json"  # Окрема база для тесту!
 PING_LIMITS = {
     "min_delay": 0.1,
     "max_delay": 10.0,
-    "default_delay": 1.5,
+    "default_delay": 0.5,
     "min_chunk": 1,
     "max_chunk": 10,
     "default_chunk": 5

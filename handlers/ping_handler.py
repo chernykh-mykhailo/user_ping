@@ -207,16 +207,51 @@ class PingHandler(BaseHandler):
                 if is_first_chunk and show_count:
                     count_text = f" (👥 {len(user_ids)})"
                 
-                sent_message = await self.bot.send_message(
-                    chat_id,
-                    f"<b>{call_text}{count_text}</b>\n\n" + " ".join(mentions) + footer_text,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_notification=silent_mode
-                )
+                # Відправляємо повідомлення з повторами при FloodControl (v1.6.5)
+                sent_message = None
+                while not sent_message:
+                    try:
+                        sent_message = await self.bot.send_message(
+                            chat_id,
+                            f"<b>{call_text}{count_text}</b>\n\n" + " ".join(mentions) + footer_text,
+                            parse_mode="HTML",
+                            reply_markup=keyboard,
+                            disable_notification=silent_mode
+                        )
+                    except Exception as e:
+                        if "retry after" in str(e).lower():
+                            # Витягуємо час очікування
+                            import re
+                            wait_match = re.search(r"after (\d+)", str(e).lower())
+                            wait_time = int(wait_match.group(1)) if wait_match else 30
+                            
+                            self.logger.warning(f"Flood Control! Чекаємо {wait_time}с у чаті {chat_id}")
+                            
+                            # Повідомляємо юзерів, якщо очікування довге
+                            if wait_time > 10:
+                                try:
+                                    wait_msg = await self.bot.send_message(
+                                        chat_id, 
+                                        f"⏳ <b>Telegram обмежив швидкість.</b>\nАвтоматично продовжу через {wait_time} сек...",
+                                        parse_mode="HTML"
+                                    )
+                                    asyncio.create_task(self.auto_cleanup(wait_msg))
+                                except: pass
+                            
+                            await asyncio.sleep(wait_time + 1)
+                            
+                            # Перевіряємо, чи не натиснули СТОП поки ми спали
+                            if self.chat_repo.get_stop_flag(clean_chat_id):
+                                return
+                        else:
+                            # Якщо інша помилка - логуємо і пропускаємо чанк
+                            self.logger.error(f"Помилка при відправці чанку {i}: {e}")
+                            break
+                
+                if not sent_message:
+                    continue
                 
                 # Плануємо авточистку (v1.6.3)
-                # Використовуємо create_task, щоб чистка не гальмувала чергу пінгів
                 if not add_stop_button:
                     asyncio.create_task(self.auto_cleanup(sent_message))
                 else:
@@ -231,7 +266,7 @@ class PingHandler(BaseHandler):
                 
                 await asyncio.sleep(ping_delay)
             except Exception as e:
-                self.logger.error(f"Помилка при відправці чанку {i}: {e}")
+                self.logger.error(f"Глобальна помилка в циклі пінгів: {e}")
                 continue
         
         # В кінці всіх пінгів плануємо видалення кнопок "Стоп" (v1.6.3)
