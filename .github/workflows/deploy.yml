@@ -47,7 +47,8 @@ jobs:
               cd "$PROJECT_PATH"
               # Update remote URL to include token just in case
               git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-              git pull origin main
+              git fetch --all
+              git reset --hard origin/main
             fi
             
             # Restore .env file from Secrets
