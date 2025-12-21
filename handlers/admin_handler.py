@@ -326,6 +326,8 @@ class AdminHandler(BaseHandler):
         phone = message.text.strip().replace(" ", "")
         self.logger.info(f"Спроба авторизації юзербота для номера: {phone}")
         
+        status_msg = await self._safe_answer(message, "⏳ <b>Зв'язуюсь з Telegram...</b>", parse_mode="HTML")
+        
         try:
             sent_code = await self.userbot.request_phone_code(phone)
             await state.update_data(
@@ -333,8 +335,8 @@ class AdminHandler(BaseHandler):
                 phone_code_hash=sent_code.phone_code_hash
             )
             await state.set_state(LoginStates.waiting_for_code)
-            await self._safe_answer(
-                message, 
+            
+            await status_msg.edit_text(
                 f"✅ <b>Код відправлено на {phone}!</b>\n\n"
                 "Перевірте ваші <b>повідомлення в Telegram</b> (код прийде від сервісного акаунту).\n\n"
                 "Введіть отриманий код нижче:",
@@ -356,7 +358,7 @@ class AdminHandler(BaseHandler):
             else:
                 msg = f"❌ Помилка при запиті коду: <code>{error_text}</code>\nСпробуйте знову: /ub_login"
             
-            await self._safe_answer(message, msg, parse_mode="HTML")
+            await status_msg.edit_text(msg, parse_mode="HTML")
             await state.clear()
 
     async def process_auth_code(self, message: Message, state: FSMContext):
@@ -368,6 +370,8 @@ class AdminHandler(BaseHandler):
         data = await state.get_data()
         self.logger.info(f"Отримано код від адміна для {data.get('phone')}")
         
+        status_msg = await self._safe_answer(message, "⏳ <b>Перевіряю код...</b>", parse_mode="HTML")
+        
         try:
             result = await self.userbot.sign_in_with_code(
                 data['phone'], 
@@ -377,20 +381,19 @@ class AdminHandler(BaseHandler):
             
             if result['status'] == 'password_needed':
                 await state.set_state(LoginStates.waiting_for_password)
-                await self._safe_answer(
-                    message, 
+                await status_msg.edit_text(
                     "🔐 <b>2FA активовано!</b>\n\n"
                     "Будь ласка, введіть ваш хмарний пароль (Cloud Password):",
                     parse_mode="HTML"
                 )
             else:
                 await state.clear()
-                await self._safe_answer(message, "🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
+                await status_msg.edit_text("🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
                 await self.userbot.start() # Перезавантажуємо клієнт
                 
         except Exception as e:
             self.logger.error(f"Error signing in: {e}")
-            await self._safe_answer(message, f"❌ Помилка при вході: {e}\nСпробуйте знову: /ub_login")
+            await status_msg.edit_text(f"❌ Помилка при вході: <code>{e}</code>\nСпробуйте знову: /ub_login", parse_mode="HTML")
             await state.clear()
 
     async def process_auth_password(self, message: Message, state: FSMContext):
