@@ -7,7 +7,7 @@ from dataclasses import dataclass
 # === API CREDENTIALS ===
 API_ID = int(os.getenv('API_ID', '0'))
 API_HASH = os.getenv('API_HASH', '')
-SESSION_NAME = os.getenv('TEST_SESSION_NAME') or os.getenv('SESSION_NAME', 'account2_session_test')
+SESSION_NAME = os.getenv('TEST_SESSION_NAME', 'account2_session_test')
 USE_USERBOT = os.getenv('USE_USERBOT', 'True').lower() == 'true'
 
 # ТЕСТОВИЙ БОТ
