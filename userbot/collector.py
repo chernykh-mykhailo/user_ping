@@ -2,6 +2,7 @@
 Userbot collector - збір даних через Telethon (SRP)
 """
 import logging
+import asyncio
 from telethon import TelegramClient, events as t_events
 from core.database import ChatRepository
 from utils.helpers import get_clean_chat_id
