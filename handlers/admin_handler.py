@@ -9,6 +9,7 @@ from aiogram.types import Message
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from userbot.collector import UserbotCollector
+from config import ADMIN_USER_ID, PING_LIMITS
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
