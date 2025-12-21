@@ -314,10 +314,11 @@ class UserHandler(BaseHandler):
             if callback.from_user.id == ADMIN_USER_ID:
                 text += (
                     "\n👑 <b>Адмін-команди (Owner Only):</b>\n"
+                    "• /apanel — Глобальні налаштування\n"
+                    "• /ub_login — Авторизація юзербота\n"
                     "• /admin_grant_premium user_id days\n"
                     "• /admin_revoke_premium user_id\n"
-                    "• /admin_add_payment user_id amount\n"
-                    "• /admin_toggle_userbot — Перемкнути юзербота"
+                    "• /admin_toggle_userbot — ВКЛ/ВИКЛ юзербот"
                 )
             
             # Додаємо кнопку налаштувань прямо сюди для зручності

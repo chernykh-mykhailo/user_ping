@@ -160,7 +160,7 @@ class AdminHandler(BaseHandler):
             f"🚫 Постійно вимкнено: {stats['super_unreg']}"
         )
         
-        sent = await message.answer(stats_text, parse_mode="HTML")
+        sent = await self._safe_answer(message, stats_text, parse_mode="HTML")
         await self.auto_cleanup(message, sent)
         self.logger.info(f"Відправлено статистику: {stats['total']} осіб")
 
@@ -182,10 +182,10 @@ class AdminHandler(BaseHandler):
                 "📝 <b>Швидкі команди:</b>\n"
                 "• <code>/apanel set_delay 0.5</code>\n"
                 "• <code>/admin_toggle_userbot</code>\n"
-                "• <code>/ub_login</code> — Авторизація\n"
+                "• <code>/ub_login</code> — Вхід в акаунт\n"
                 "• <code>/ahelp</code> — Всі команди"
             )
-            await message.answer(text, parse_mode="HTML")
+            await self._safe_answer(message, text, parse_mode="HTML")
             return
             
         action = args[1]
@@ -198,9 +198,9 @@ class AdminHandler(BaseHandler):
                 if delay > PING_LIMITS["max_delay"]: delay = PING_LIMITS["max_delay"]
                 
                 self.chat_repo.set_global_setting("ping_delay", delay)
-                await message.answer(f"✅ <b>Global Delay встановлено:</b> {delay}s", parse_mode="HTML")
+                await self._safe_answer(message, f"✅ <b>Global Delay встановлено:</b> {delay}s", parse_mode="HTML")
             except ValueError:
-                await message.answer("❌ Введіть коректне число (наприклад: 0.5)")
+                await self._safe_answer(message, "❌ Введіть коректне число (наприклад: 0.5)")
 
     async def cmd_ahelp(self, message: Message):
         """Швидка допомога для власника"""
@@ -222,7 +222,15 @@ class AdminHandler(BaseHandler):
             "• /admin_revoke_premium [user_id]\n"
             "• /admin_add_payment [user_id] [amount]"
         )
-        await message.answer(help_text, parse_mode="HTML")
+        help_text += (
+            "\n👑 <b>Адмін-команди (Owner Only):</b>\n"
+            "• /apanel — Глобальні налаштування\n"
+            "• /ub_login — Авторизація юзербота\n"
+            "• /admin_grant_premium user_id days\n"
+            "• /admin_revoke_premium user_id\n"
+            "• /admin_toggle_userbot — ВКЛ/ВИКЛ юзербот"
+        )
+        await self._safe_answer(message, help_text, parse_mode="HTML")
 
     async def cmd_admin_add_trigger(self, message: Message):
         """Додає глобальний тригер (Owner only)"""
@@ -279,7 +287,8 @@ class AdminHandler(BaseHandler):
             self.logger.error(f"Error toggling userbot: {e}")
             status = f"{'УВІМКНЕНО' if new_state else 'ВИМКНЕНО'} (Але виникла помилка зв'язку: {e})"
         
-        await message.answer(
+        await self._safe_answer(
+            message,
             f"🤖 <b>Використання юзербота:</b> {status}\n\n"
             f"Тепер ви можете використовувати цей акаунт в іншому місці, якщо він вимкнений.",
             parse_mode="HTML"
@@ -292,7 +301,8 @@ class AdminHandler(BaseHandler):
             return
             
         await state.set_state(LoginStates.waiting_for_phone)
-        await message.answer(
+        await self._safe_answer(
+            message,
             "🛰 <b>АВТОРИЗАЦІЯ ЮЗЕРБОТА</b>\n\n"
             "Будь ласка, введіть номер телефону в міжнародному форматі:\n"
             "Приклад: <code>+380501112233</code>\n\n"
@@ -306,7 +316,7 @@ class AdminHandler(BaseHandler):
             return
             
         await state.clear()
-        await message.answer("❌ Авторизацію скасовано.")
+        await self._safe_answer(message, "❌ Авторизацію скасовано.")
 
     async def process_auth_phone(self, message: Message, state: FSMContext):
         """Обробляє номер телефону"""
@@ -319,7 +329,8 @@ class AdminHandler(BaseHandler):
                 phone_code_hash=sent_code.phone_code_hash
             )
             await state.set_state(LoginStates.waiting_for_code)
-            await message.answer(
+            await self._safe_answer(
+                message, 
                 f"✅ Код відправлено на <code>{phone}</code>!\n\n"
                 "Будь ласка, **введіть код** із повідомлення Telegram.\n"
                 "Приклад: `12345`",
@@ -327,7 +338,7 @@ class AdminHandler(BaseHandler):
             )
         except Exception as e:
             self.logger.error(f"Error requesting code: {e}")
-            await message.answer(f"❌ Помилка при запиті коду: {e}\nСпробуйте знову: /ub_login")
+            await self._safe_answer(message, f"❌ Помилка при запиті коду: {e}\nСпробуйте знову: /ub_login")
             await state.clear()
 
     async def process_auth_code(self, message: Message, state: FSMContext):
@@ -344,19 +355,20 @@ class AdminHandler(BaseHandler):
             
             if result['status'] == 'password_needed':
                 await state.set_state(LoginStates.waiting_for_password)
-                await message.answer(
+                await self._safe_answer(
+                    message, 
                     "🔐 <b>2FA активовано!</b>\n\n"
                     "Будь ласка, введіть ваш хмарний пароль (Cloud Password):",
                     parse_mode="HTML"
                 )
             else:
                 await state.clear()
-                await message.answer("🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
+                await self._safe_answer(message, "🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
                 await self.userbot.start() # Перезавантажуємо клієнт
                 
         except Exception as e:
             self.logger.error(f"Error signing in: {e}")
-            await message.answer(f"❌ Помилка при вході: {e}\nСпробуйте знову: /ub_login")
+            await self._safe_answer(message, f"❌ Помилка при вході: {e}\nСпробуйте знову: /ub_login")
             await state.clear()
 
     async def process_auth_password(self, message: Message, state: FSMContext):
@@ -366,10 +378,10 @@ class AdminHandler(BaseHandler):
         try:
             await self.userbot.sign_in_with_password(password)
             await state.clear()
-            await message.answer("🎉 <b>Успіх! Юзербот авторизований через 2FA.</b>", parse_mode="HTML")
+            await self._safe_answer(message, "🎉 <b>Успіх! Юзербот авторизований через 2FA.</b>", parse_mode="HTML")
             await self.userbot.start()
             
         except Exception as e:
             self.logger.error(f"Error signing in with password: {e}")
-            await message.answer(f"❌ Невірний пароль або інша помилка: {e}\nСпробуйте знову: /ub_login")
+            await self._safe_answer(message, f"❌ Невірний пароль або інша помилка: {e}\nСпробуйте знову: /ub_login")
             await state.clear()
