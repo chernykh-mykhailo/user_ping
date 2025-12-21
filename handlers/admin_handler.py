@@ -338,16 +338,30 @@ class AdminHandler(BaseHandler):
             await callback.answer("❌ Помилка конфігурації акаунта")
             return
             
+        if not acc_config.get('api_id') or not acc_config.get('api_hash'):
+            self.logger.error(f"Конфігурація для {account_id} неповна: {acc_config}")
+            await callback.message.edit_text(
+                f"❌ <b>Помилка конфігурації {account_id}!</b>\n\n"
+                "Перевірте файл <code>.env</code> на сервері. Поля API_ID або API_HASH порожні.",
+                parse_mode="HTML"
+            )
+            return
+
         # Зберігаємо обраний акаунт у стані
         await state.update_data(acc_id=account_id, acc_config=acc_config)
         
         # Перемикаємо клієнт на льоту!
-        await callback.message.edit_text(f"⏳ Перемикаюся на <b>{account_id}</b>...", parse_mode="HTML")
-        await self.userbot.switch_account(
-            api_id=acc_config['api_id'],
-            api_hash=acc_config['api_hash'],
-            session_name=acc_config['session']
-        )
+        await callback.message.edit_text(f"⏳ Перемикаюся на <b>{account_id}</b>...\n(API: {acc_config['api_id']})", parse_mode="HTML")
+        try:
+            await self.userbot.switch_account(
+                api_id=acc_config['api_id'],
+                api_hash=acc_config['api_hash'],
+                session_name=acc_config['session']
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to switch account: {e}")
+            await callback.message.edit_text(f"❌ <b>Помилка ініціалізації:</b>\n<code>{e}</code>", parse_mode="HTML")
+            return
         
         await state.set_state(LoginStates.waiting_for_phone)
         await callback.message.edit_text(
