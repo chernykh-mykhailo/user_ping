@@ -227,7 +227,9 @@ class PingBot:
         try:
             # Запускаємо userbot тільки якщо він увімкнений
             if self.use_userbot:
-                await self.userbot.start()
+                success = await self.userbot.start()
+                if not success:
+                    self.logger.warning("⚠️ Юзербот не зміг запуститися (необхідна авторизація). Основний бот працюватиме без функцій збору.")
             else:
                 self.logger.info("Userbot is DISABLED by global setting")
             

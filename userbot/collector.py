@@ -60,9 +60,23 @@ class UserbotCollector:
         return count
     
     async def start(self):
-        """Запускає userbot"""
-        await self.client.start()
-        self.logger.info("Userbot запущено")
+        """
+        Запускає userbot (Headless режим)
+        v1.6.4: не запитує код в консолі, якщо сесія не авторизована
+        """
+        try:
+            await self.client.connect()
+            
+            if not await self.client.is_user_authorized():
+                self.logger.warning("Userbot НЕ авторизований! Функції збору учасників будуть недоступні.")
+                self.logger.warning("Для авторизації запустіть бота в інтерактивному режимі.")
+                return False
+                
+            self.logger.info("Userbot успішно підключено та авторизовано")
+            return True
+        except Exception as e:
+            self.logger.error(f"Помилка підключення Userbot: {e}")
+            return False
     
     async def stop(self):
         """Зупиняє userbot"""

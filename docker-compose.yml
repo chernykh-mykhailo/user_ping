@@ -10,7 +10,7 @@ services:
     volumes:
       - ./users_data_test.json:/app/users_data_test.json
       - ./backups:/app/backups
-      - ./account2_session.session:/app/account2_session.session
+      - ./account2_session_test.session:/app/account2_session_test.session
     logging:
       driver: "json-file"
       options:
