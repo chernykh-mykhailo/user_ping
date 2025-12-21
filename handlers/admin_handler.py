@@ -346,17 +346,25 @@ class AdminHandler(BaseHandler):
         except Exception as e:
             self.logger.error(f"Помилка при запиті коду: {e}")
             error_text = str(e)
-            if "EMAIL_INSTALL_MISSING" in error_text:
+            
+            if "FLOOD_WAIT" in error_text:
+                import re
+                seconds = re.search(r"(\d+)", error_text)
+                wait_time = seconds.group(1) if seconds else "кілька"
+                msg = f"⏳ <b>Забагато спроб!</b>\n\nTelegram обмежив запити для цього номера. Будь ласка, зачекайте <b>{wait_time}</b> сек. перед наступною спробою."
+            elif "EMAIL_INSTALL_MISSING" in error_text:
                 msg = (
                     "⚠️ <b>Telegram вимагає підтвердження через Email.</b>\n\n"
                     "Це стається через занадто часті спроби входу або нові правила безпеки.\n\n"
                     "<b>Що зробити:</b>\n"
                     "1. Зачекайте 15-30 хвилин (обов'язково!).\n"
-                    "2. Переконайтеся, що у вас в налаштуваннях Telegram додана пошта.\n"
+                    "2. Переконайтеся, що у вашому Telegram (Приватність) додана пошта.\n"
                     "3. Спробуйте пізніше командою /ub_login."
                 )
+            elif "PHONE_NUMBER_INVALID" in error_text:
+                msg = "❌ <b>Невірний формат номера!</b>\n\nВведіть номер у міжнародному форматі, наприклад: <code>+380501112233</code>"
             else:
-                msg = f"❌ Помилка при запиті коду: <code>{error_text}</code>\nСпробуйте знову: /ub_login"
+                msg = f"❌ <b>Помилка подорожі до Telegram:</b>\n<code>{error_text}</code>\n\nСпробуйте пізніше або зверніться до підтримки."
             
             await status_msg.edit_text(msg, parse_mode="HTML")
             await state.clear()
@@ -393,7 +401,18 @@ class AdminHandler(BaseHandler):
                 
         except Exception as e:
             self.logger.error(f"Error signing in: {e}")
-            await status_msg.edit_text(f"❌ Помилка при вході: <code>{e}</code>\nСпробуйте знову: /ub_login", parse_mode="HTML")
+            error_text = str(e)
+            
+            if "PHONE_CODE_EXPIRED" in error_text:
+                msg = "❌ <b>Термін дії коду вичерпано!</b>\nБудь ласка, почніть вхід заново: /ub_login"
+            elif "PHONE_CODE_INVALID" in error_text:
+                msg = "❌ <b>Невірний код!</b>\nВи ввели неправильні цифри. Спробуйте ще раз або почніть заново."
+            elif "FLOOD_WAIT" in error_text:
+                msg = "⏳ <b>Забагато спроб вводу коду!</b>\nTelegram заблокував вас на деякий час. Спробуйте через 15-30 хв."
+            else:
+                msg = f"❌ <b>Помилка при вході:</b>\n<code>{error_text}</code>\n\nСпробуйте /ub_login знову."
+                
+            await status_msg.edit_text(msg, parse_mode="HTML")
             await state.clear()
 
     async def process_auth_password(self, message: Message, state: FSMContext):
