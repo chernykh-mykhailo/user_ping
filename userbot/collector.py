@@ -46,6 +46,9 @@ class UserbotCollector:
         """
         Синхронізує всіх учасників чату
         """
+        if not self.client.is_connected() or not await self.client.is_user_authorized():
+            raise Exception("Userbot not authorized")
+
         clean_chat_id = get_clean_chat_id(chat_id)
         count = 0
         

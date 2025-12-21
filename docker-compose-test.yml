@@ -1,0 +1,18 @@
+services:
+  ping-bot-test:
+    build: .
+    container_name: my_ping_bot_test
+    restart: always
+    environment:
+      - BOT_MODE=test # Тестовий режим
+    env_file:
+      - .env
+    volumes:
+      - ./users_data_test.json:/app/users_data_test.json
+      - ./backups:/app/backups
+      - ./account2_session_test.session:/app/account2_session_test.session
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

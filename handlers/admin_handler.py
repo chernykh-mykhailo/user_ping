@@ -90,7 +90,14 @@ class AdminHandler(BaseHandler):
             
         except Exception as e:
             self.logger.error(f"Sync error: {e}")
-            await status.edit_text("❌ Помилка: Не вдалося отримати список.")
+            if "Userbot not authorized" in str(e):
+                await status.edit_text(
+                    "❌ <b>Юзербот не авторизований!</b>\n\n"
+                    "Будь ласка, запустіть бота в інтерактивному режимі на сервері, щоб ввести код підтвердження.",
+                    parse_mode="HTML"
+                )
+            else:
+                await status.edit_text("❌ Помилка: Не вдалося отримати список.")
         
         await self.auto_cleanup(message, status)
     
