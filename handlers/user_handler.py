@@ -38,25 +38,26 @@ class UserHandler(BaseHandler):
         # Contact
         self.router.message(Command("feedback", "contact"))(self.cmd_feedback)
         
-        # Unreg/Reg - regex catches "анрег" with optional leading space and text after
+        # Unreg/Reg - case-insensitive for Ukrainian commands (Анрег = анрег)
+        import re
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r'^\s*!?анрег(\s|$)', flags=0))(self.cmd_unreg)
+        self.router.message(F.text.regexp(r'^\s*!?анрег(\s|$)', flags=re.IGNORECASE))(self.cmd_unreg)
         
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(r'^!?суперанрег', flags=0))(self.cmd_superunreg)
+        self.router.message(F.text.regexp(r'^\s*!?суперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_superunreg)
         
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r'^!?рег', flags=0))(self.cmd_reg)
+        self.router.message(F.text.regexp(r'^\s*!?рег(\s|$)', flags=re.IGNORECASE))(self.cmd_reg)
         
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
-        self.router.message(F.text.regexp(r'^!?ганрег', flags=0))(self.cmd_global_unreg)
+        self.router.message(F.text.regexp(r'^\s*!?ганрег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_unreg)
         
         self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
-        self.router.message(F.text.regexp(r'^!?гсуперанрег', flags=0))(self.cmd_global_superunreg)
+        self.router.message(F.text.regexp(r'^\s*!?гсуперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_superunreg)
         
         self.router.message(Command("greg"))(self.cmd_global_reg)
-        self.router.message(F.text.regexp(r'^!?грег', flags=0))(self.cmd_global_reg)
+        self.router.message(F.text.regexp(r'^\s*!?грег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_reg)
         
         # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
