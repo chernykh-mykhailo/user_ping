@@ -9,9 +9,12 @@ services:
       - .env
     volumes:
       - ./users_data.json:/app/users_data.json
+      - ./users_data_test.json:/app/users_data_test.json
       - ./backups:/app/backups
       - ./account2_session_prod.session:/app/account2_session_prod.session
       - ./account3_session_prod.session:/app/account3_session_prod.session
+      - ./account2_session_test.session:/app/account2_session_test.session
+      - ./account3_session_test.session:/app/account3_session_test.session
     logging:
       driver: "json-file"
       options:

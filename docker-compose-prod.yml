@@ -11,6 +11,7 @@ services:
       - ./users_data.json:/app/users_data.json
       - ./backups:/app/backups
       - ./account2_session_prod.session:/app/account2_session_prod.session
+      - ./account3_session_prod.session:/app/account3_session_prod.session
     logging:
       driver: "json-file"
       options:
