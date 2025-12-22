@@ -70,10 +70,14 @@ class AdminHandler(BaseHandler):
         self.router.message(LoginStates.waiting_for_phone)(self.process_auth_phone)
         self.router.message(LoginStates.waiting_for_code)(self.process_auth_code)
         self.router.message(LoginStates.waiting_for_password)(self.process_auth_password)
-    
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
         cid = get_clean_chat_id(chat_id)
+        
+        # v2.2.0: Глобальний персонал бота (від модератора і вище) має доступ всюди
+        if self.chat_repo.is_bot_moderator(user_id):
+            return True
+            
         try:
             member = await self.bot.get_chat_member(cid, user_id)
             is_admin = member.status in ['creator', 'administrator']
@@ -220,33 +224,39 @@ class AdminHandler(BaseHandler):
                 await self._safe_answer(message, "❌ Введіть коректне число (наприклад: 0.5)")
 
     async def cmd_ahelp(self, message: Message):
-        """Швидка допомога для власника та адмінів"""
+        """Швидка допомога для персоналу бота (Staff Help)"""
         if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
+        is_super = message.from_user.id == ADMIN_USER_ID
+        is_owner = self.chat_repo.is_owner(message.from_user.id)
+        
         help_text = (
-            "👑 <b>Admin Help Panel</b>\n\n"
-            "<b>Системні:</b>\n"
-            "• /apanel — Глобальні налаштування\n"
-            "• /sync — Синхронізація (Userbot)\n"
-            "• /admin_toggle_userbot — Вкл/Викл юзербота\n"
-            "• /ub_login — Авторизація юзербота через чат\n\n"
-            "<b>Тригери (Global):</b>\n"
-            "• /admin_add_trigger [word] [text/emoji]\n"
+            "🔐 <b>BOT STAFF HELP PANEL</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "👨‍💻 <b>Для Адмінів:</b>\n"
+            "• /admin_list — Список усього стаффу\n"
+            "• /admin_help — Керування Premium та Stars\n"
+            "• /admin_add_trigger [word] [text|emoji] — Глобальні тригери\n"
             "• /admin_del_trigger [word]\n\n"
-            "<b>Premium:</b>\n"
-            "• /admin_grant_premium [user_id] [days]\n"
-            "• /admin_revoke_premium [user_id]\n"
-            "• /admin_add_payment [user_id] [amount]"
+            "👑 <b>Для Власників:</b>\n"
+            "• /apanel — Глобальні налаштування бота\n"
+            "• /admin_toggle_userbot — Швидке перемикання ЮБ\n"
+            "• /ub_login — Авторизація Юзербота\n"
+            "• /sync — Примусова синхронізація\n"
+            "• /mod_add [id] — Додати модератора\n"
+            "• /mod_del [id] — Видалити модератора\n"
         )
-        help_text += (
-            "\n👑 <b>Адмін-команди (Owner Only):</b>\n"
-            "• /apanel — Глобальні налаштування\n"
-            "• /ub_login — Авторизація юзербота\n"
-            "• /admin_grant_premium user_id days\n"
-            "• /admin_revoke_premium user_id\n"
-            "• /admin_toggle_userbot — ВКЛ/ВИКЛ юзербот"
-        )
+        
+        if is_super:
+            help_text += (
+                "\n⭐️ <b>SuperOwner Only:</b>\n"
+                "• /owner_add [id] — Додати співвласника\n"
+                "• /owner_del [id] — Видалити власника\n"
+                "• /admin_add [id] — Додати адміна бота\n"
+                "• /admin_del [id] — Видалити адміна бота\n"
+            )
+            
         await self._safe_answer(message, help_text, parse_mode="HTML")
 
     async def cmd_admin_add_trigger(self, message: Message):
@@ -514,8 +524,8 @@ class AdminHandler(BaseHandler):
     # === Admin Management Commands (Owner Only) ===
 
     async def cmd_admin_add(self, message: Message):
-        """Додає нового адміна бота (тільки власник)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Додає нового адміна бота (Власники+)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
             return
             
         args = message.text.split()
@@ -531,8 +541,8 @@ class AdminHandler(BaseHandler):
             await message.answer("❌ Введіть коректний User ID (число).")
 
     async def cmd_admin_del(self, message: Message):
-        """Видаляє адміна бота (тільки власник)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Видаляє адміна бота (Власники+)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
             return
             
         args = message.text.split()

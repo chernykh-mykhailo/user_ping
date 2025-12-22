@@ -43,11 +43,15 @@ class SettingsHandler(BaseHandler):
     
     async def _is_admin(self, chat_id: int, user_id: int, bot) -> bool:
         """Перевіряє права адміністратора"""
+        # v2.2.0: Глобальний персонал бота (від модератора і вище) має доступ всюди
+        if self.chat_repo.is_bot_moderator(user_id):
+            return True
+            
         try:
             member = await bot.get_chat_member(chat_id, user_id)
             return member.status in ['creator', 'administrator']
         except:
-            return True
+            return False
             
     async def cmd_settings(self, message: Message):
         """Відкриває меню налаштувань - спочатку вибір куди відправити"""

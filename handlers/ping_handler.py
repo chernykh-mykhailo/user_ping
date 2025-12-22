@@ -98,12 +98,16 @@ class PingHandler(BaseHandler):
     
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
+        # v2.2.0: Глобальний персонал бота (від модератора і вище) має доступ всюди
+        if self.chat_repo.is_bot_moderator(user_id):
+            return True
+            
         cid = get_clean_chat_id(chat_id)
         try:
             member = await self.bot.get_chat_member(cid, user_id)
             return member.status in ['creator', 'administrator']
         except:
-            return True
+            return False
     
     async def _get_admin_users(self, chat_id: int) -> dict:
         """Повертає тільки адміністраторів з активних користувачів"""
