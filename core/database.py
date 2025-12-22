@@ -340,6 +340,15 @@ class ChatRepository:
         """Повертає статистику чату"""
         chat_data = self.get_chat_data(chat_id)
         
+        # v2.3.0: Ensure chat_data is not None
+        if not chat_data:
+            return {
+                "total": 0,
+                "active": 0,
+                "temp_unreg": 0,
+                "super_unreg": 0
+            }
+        
         total = len(chat_data.get("users", {}))
         temp_unreg = len(chat_data.get("temp_unreg", []))
         super_unreg = len(chat_data.get("super_unreg", []))
@@ -500,6 +509,8 @@ class ChatRepository:
     def get_setting(self, chat_id: str, key: str, default: any = None) -> any:
         """Отримує налаштування чату"""
         chat_data = self.get_chat_data(chat_id)
+        if not chat_data:
+            return default
         settings = chat_data.get("settings", {})
         return settings.get(key, default)
     

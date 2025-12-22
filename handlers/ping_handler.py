@@ -314,7 +314,7 @@ class PingHandler(BaseHandler):
                 call_text = templates[template_name]
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = await self.chat_repo.get_active_users(chat_id)
+        users = self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return
@@ -334,7 +334,7 @@ class PingHandler(BaseHandler):
         call_text = parts[1] if len(parts) > 1 else "📣 Увага!"
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = await self.chat_repo.get_active_users(chat_id)
+        users = self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return
@@ -501,7 +501,7 @@ class PingHandler(BaseHandler):
         call_text = parts[1] if len(parts) > 1 else "🎲 Випадковий учасник:"
         
         chat_id = get_clean_chat_id(message.chat.id)
-        users = await self.chat_repo.get_active_users(chat_id)
+        users = self.chat_repo.get_active_users(chat_id)
         
         if not users:
             return

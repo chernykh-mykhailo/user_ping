@@ -511,9 +511,9 @@ class UserHandler(BaseHandler):
         self.chat_repo.add_to_global_unreg(user_id, is_super=False)
         
         sent = await message.answer(
-            "🔇 <b>Глобальний анрег активовано!</b>\n\n"
-            "Ви більше не отримуватимете пінги в <b>жодному</b> чаті, де є цей бот.\n"
-            "<i>(Пінг увімкнеться автоматично, якщо ви напишете в будь-якому чаті)</i>",
+            "🌍 <b>Глобальний анрег активовано</b>\n\n"
+            "Пінги вимкнені у <b>всіх чатах</b> з ботом.\n"
+            "<i>Автоувімкнення при наступному повідомленні</i>",
             parse_mode="HTML"
         )
         await self.auto_cleanup(message, sent)
