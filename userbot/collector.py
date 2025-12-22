@@ -22,9 +22,11 @@ class UserbotCollector:
         session_name: str,
         chat_repo: ChatRepository
     ):
+        self.session_name = session_name
         self.client = TelegramClient(session_name, api_id, api_hash)
         self.chat_repo = chat_repo
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"📁 Userbot session: {session_name}.session")
         
         # Реєструємо обробники
         self._register_handlers()

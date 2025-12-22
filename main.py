@@ -80,7 +80,7 @@ class PingBot:
         
         # Реєструємо Middleware (v1.6.0)
         from core.middleware import ActivityMiddleware
-        self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo))
+        self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo, self.bot))
         
         self.ping_handler = PingHandler(
             self.chat_repo,

@@ -163,6 +163,7 @@ class SettingsHandler(BaseHandler):
         show_count = self.chat_repo.get_setting(chat_id, "show_count", True)
         auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
         restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
+        unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -223,6 +224,12 @@ class SettingsHandler(BaseHandler):
             ],
             [
                 InlineKeyboardButton(
+                    text=f"{'✅' if unreg_notify else '❌'} Анрег-сповіщення: {'ТАК' if unreg_notify else 'НІ'}", 
+                    callback_data=f"toggle_unreg_notify{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text=f"Швидкість: {speed_text}", 
                     callback_data=f"change_speed{suffix}"
                 )
@@ -279,6 +286,7 @@ class SettingsHandler(BaseHandler):
         show_count = self.chat_repo.get_setting(chat_id, "show_count", True)
         auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
         restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
+        unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -334,6 +342,12 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'🔔' if restart_notice else '🔕'} Сповіщення про запуск: {'ТАК' if restart_notice else 'НІ'}", 
                     callback_data=f"toggle_restart_notice{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if unreg_notify else '❌'} Анрег-сповіщення: {'ТАК' if unreg_notify else 'НІ'}", 
+                    callback_data=f"toggle_unreg_notify{suffix}"
                 )
             ],
             [
