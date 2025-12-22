@@ -293,6 +293,25 @@ class PingHandler(BaseHandler):
         # В кінці всіх пінгів плануємо видалення кнопок "Стоп" (v1.6.3)
         for msg in stop_messages:
             asyncio.create_task(self.auto_cleanup(msg))
+        
+        # Повідомлення про завершення (v2.3.1) - якщо увімкнено show_count
+        show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
+        if show_count and not self.chat_repo.get_stop_flag(clean_chat_id):
+            try:
+                stats = self.chat_repo.get_stats(clean_chat_id)
+                completion_msg = (
+                    f"✅ <b>Виклик завершено!</b>\n"
+                    f"👥 Пропінговано: {len(users)}\n"
+                    f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост."
+                )
+                sent = await self.bot.send_message(
+                    chat_id, 
+                    completion_msg, 
+                    parse_mode="HTML"
+                )
+                asyncio.create_task(self.auto_cleanup(sent))
+            except Exception as e:
+                self.logger.debug(f"Could not send completion message: {e}")
     
     async def cmd_all(self, message: Message):
         """Пінгує всіх користувачів"""
