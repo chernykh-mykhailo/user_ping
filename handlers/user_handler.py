@@ -418,6 +418,11 @@ class UserHandler(BaseHandler):
         
         added = self.chat_repo.add_to_temp_unreg(chat_id, user_id)
         
+        # Debug: verify it was actually saved
+        chat_data = self.chat_repo.get_chat_data(chat_id)
+        current_temp = chat_data.get("temp_unreg", [])
+        self.logger.info(f"[UNREG DEBUG] added={added}, temp_unreg now: {current_temp}")
+        
         if added:
             sent = await self._safe_answer(
                 message, 
