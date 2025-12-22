@@ -1,20 +1,16 @@
 """
-Core package - Database layer
+Core module exports (v2.3.0 - Domain Architecture)
 """
-from .database import (
-    IDatabase,
-    JSONDatabase,
-    ChatRepository,
-    PremiumRepository,
-    ChatPremiumRepository,
-    ReferralRepository
-)
+# New: Domain-based architecture
+from .chat_repository import ChatRepository
+
+# Old: Legacy database classes (for compatibility)
+from .database import JSONDatabase, PremiumRepository, ChatPremiumRepository, ReferralRepository
 
 __all__ = [
-    'IDatabase',
-    'JSONDatabase',
-    'ChatRepository',
-    'PremiumRepository',
-    'ChatPremiumRepository',
-    'ReferralRepository'
+    "ChatRepository",
+    "JSONDatabase",
+    "PremiumRepository",
+    "ChatPremiumRepository",
+    "ReferralRepository"
 ]

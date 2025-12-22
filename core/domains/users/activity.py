@@ -1,0 +1,219 @@
+"""
+User Activity Domain
+Manages user activity tracking, timestamps, and filtered lists
+~200 lines, focused responsibility
+"""
+from typing import Dict, List
+from datetime import datetime, timedelta
+from core.storage import JSONStorage
+
+
+class UserActivityDomain:
+    """
+    Handles user activity tracking and retrieval
+    Single Responsibility: User presence and activity timestamps
+    """
+    
+    def __init__(self, storage: JSONStorage):
+        self.storage = storage
+    
+    def save_user_activity(
+        self,
+        chat_id: str,
+        user_id: str,
+        name: str,
+        source: str = "message",
+        profile_time: str = None
+    ) -> None:
+        """
+        Saves user activity (DOES NOT handle unreg - that's UnregDomain's job)
+        
+        Args:
+            chat_id: Chat identifier
+            user_id: User identifier (auto-converted to string)
+            name: User display name
+            source: 'message' (wrote in chat) or 'profile' (from sync/status)
+            profile_time: ISO timestamp for profile status (optional)
+        """
+        user_id = str(user_id)  # Type safety
+        data = self.storage.load()
+        
+        # Initialize chat if doesn't exist
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+        
+        if "users" not in data[chat_id]:
+            data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": []}
+        
+        # HTML escaping
+        safe_name = name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        now = datetime.now().isoformat()
+        user_entry = data[chat_id]["users"].get(user_id, {})
+        
+        if not isinstance(user_entry, dict):
+            user_entry = {"name": safe_name[:20], "last_seen": "2000-01-01T00:00:00"}
+
+        # Logic split by source type
+        if source == "message":
+            # Throttle: only update if >5 min since last activity
+            last_seen_str = user_entry.get("last_seen", "2000-01-01T00:00:00")
+            try:
+                last_seen_dt = datetime.fromisoformat(last_seen_str)
+                if (datetime.now() - last_seen_dt).total_seconds() < 300:
+                    # Only update name if changed
+                    if user_entry.get("name") != safe_name[:20]:
+                        user_entry["name"] = safe_name[:20]
+                        data[chat_id]["users"][user_id] = user_entry
+                        self.storage.save(data)
+                    return
+            except:
+                pass
+
+            user_entry["last_seen"] = now
+            user_entry["name"] = safe_name[:20]
+            
+        else:  # source: profile (sync or status)
+            p_time = profile_time or now
+            # Only update if timestamp is newer
+            old_p_time = user_entry.get("profile_seen", "2000-01-01T00:00:00")
+            if p_time > old_p_time:
+                user_entry["profile_seen"] = p_time
+            
+            # Always update name on sync
+            user_entry["name"] = safe_name[:20]
+
+        data[chat_id]["users"][user_id] = user_entry
+        self.storage.save(data)
+    
+    def remove_user(self, chat_id: str, user_id: str) -> None:
+        """Removes user from chat (e.g., left or kicked)"""
+        user_id = str(user_id)
+        data = self.storage.load()
+        
+        if chat_id in data and "users" in data[chat_id]:
+            if user_id in data[chat_id]["users"]:
+                del data[chat_id]["users"][user_id]
+                self.storage.save(data)
+    
+    def get_active_users(self, chat_id: str) -> Dict[str, str]:
+        """
+        Returns active users (excluding unregged), sorted by activity
+        NOTE: Unreg filtering is done here, but management is in UnregDomain
+        
+        Returns:
+            Dict[user_id, name] sorted by most recent activity
+        """
+        from core.domains.users.unreg import UnregDomain
+        
+        chat_data = self._get_chat_data(chat_id)
+        all_users_raw = chat_data.get("users", {})
+        
+        # Get unreg sets (delegating to UnregDomain would be circular, so we read directly)
+        temp_unreg, super_unreg, global_unreg, global_super = self._get_unreg_sets(chat_id)
+        
+        # Filter unregs
+        active_list = []
+        for uid, val in all_users_raw.items():
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                continue
+            
+            # Handle both old and new format
+            name = val["name"] if isinstance(val, dict) else val
+            
+            # Choose best timestamp (v1.8.5)
+            last_seen = val.get("last_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            profile_seen = val.get("profile_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            
+            # Use max of both
+            actual_seen = max(last_seen, profile_seen)
+            active_list.append((uid, name, actual_seen))
+            
+        # Sort: freshest timestamps first
+        active_list.sort(key=lambda x: x[2], reverse=True)
+        
+        return {uid: name for uid, name, _ in active_list}
+    
+    def get_filtered_users(
+        self,
+        chat_id: str,
+        source: str = "both",
+        hours: int = 24
+    ) -> Dict[str, str]:
+        """
+        Returns users filtered by activity type and time window
+        
+        Args:
+            chat_id: Chat identifier
+            source: 'message' (wrote), 'profile' (online), or 'both'
+            hours: Time window
+            
+        Returns:
+            Dict[user_id, name] matching criteria
+        """
+        chat_data = self._get_chat_data(chat_id)
+        all_users = chat_data.get("users", {})
+        
+        temp_unreg, super_unreg, global_unreg, global_super = self._get_unreg_sets(chat_id)
+        
+        threshold = datetime.now() - timedelta(hours=hours)
+        result = {}
+        
+        for uid, val in all_users.items():
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                continue
+            
+            if not isinstance(val, dict):
+                continue
+            
+            ls_str = val.get("last_seen", "2000-01-01T00:00:00")
+            ps_str = val.get("profile_seen", "2000-01-01T00:00:00")
+            
+            ls = datetime.fromisoformat(ls_str)
+            ps = datetime.fromisoformat(ps_str)
+            
+            match_found = False
+            if source == "message" and ls > threshold:
+                match_found = True
+            elif source == "profile" and ps > threshold:
+                match_found = True
+            elif source == "both" and max(ls, ps) > threshold:
+                match_found = True
+                
+            if match_found:
+                result[uid] = val["name"]
+                
+        return result
+    
+    def get_all_chats(self) -> List[str]:
+        """Returns list of all chat IDs in database"""
+        data = self.storage.load()
+        return [cid for cid in data.keys() if cid not in ["global_unreg", "premium_users", "payments", "referrals"]]
+    
+    def _get_chat_data(self, chat_id: str) -> Dict:
+        """Internal: Get chat data, creating if necessary"""
+        data = self.storage.load()
+        if chat_id not in data:
+            data[chat_id] = {
+                "users": {},
+                "temp_unreg": [],
+                "super_unreg": []
+            }
+            self.storage.save(data)
+        return data.get(chat_id)
+    
+    def _get_unreg_sets(self, chat_id: str) -> tuple:
+        """
+        Internal: Returns all 4 unreg sets as string sets
+        (temp_unreg, super_unreg, global_temp, global_super)
+        """
+        data = self.storage.load()
+        chat_data = data.get(chat_id, {})
+        
+        temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
+        super_unreg = set(map(str, chat_data.get("super_unreg", [])))
+        
+        global_unreg = set(map(str, data.get("global_unreg", {}).get("temp", [])))
+        global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
+        
+        return temp_unreg, super_unreg, global_unreg, global_super
