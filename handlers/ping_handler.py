@@ -504,6 +504,11 @@ class PingHandler(BaseHandler):
         users = self.chat_repo.get_active_users(chat_id)
         
         if not users:
+            await message.answer(
+                "❌ <b>Немає зареєстрованих учасників</b>\n\n"
+                "Виконайте <code>/sync</code> для синхронізації учасників чату.",
+                parse_mode="HTML"
+            )
             return
         
         # Вибираємо випадкового

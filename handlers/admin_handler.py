@@ -44,7 +44,7 @@ class AdminHandler(BaseHandler):
         
         
         self.router.message(Command("admin_settings", "apanel"))(self.cmd_admin_settings)
-        self.router.message(Command("ahelp"))(self.cmd_ahelp)
+        self.router.message(Command("ahelp", "admin_help"))(self.cmd_ahelp)
         self.router.message(Command("admin_add_trigger"))(self.cmd_admin_add_trigger)
         self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
         self.router.message(Command("admin_toggle_userbot"))(self.cmd_admin_toggle_userbot)

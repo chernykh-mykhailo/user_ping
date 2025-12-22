@@ -107,6 +107,26 @@ class PingBot:
             self.premium_repo
         )
         
+        # v2.3.0: Onboarding - Welcome message при додаванні бота
+        from aiogram.types import ChatMemberUpdated
+        from aiogram import F
+        
+        @self.dp.my_chat_member(F.new_chat_member.status.in_(["member", "administrator"]))
+        async def bot_added_to_chat(event: ChatMemberUpdated):
+            """Відправляє welcome message коли бота додають в групу"""
+            if event.chat.type in ["group", "supergroup"]:
+                await self.bot.send_message(
+                    event.chat.id,
+                    "👋 <b>Вітаю! Ping Bot готовий до роботи!</b>\n\n"
+                    "📋 <b>Швидкий старт:</b>\n"
+                    "1️⃣ Зробіть мене <b>адміністратором</b> (необов'язково, але рекомендовано)\n"
+                    "2️⃣ Виконайте <code>/sync</code> для синхронізації учасників\n"
+                    "3️⃣ Готово! Тепер можна використовувати <code>/all</code>, <code>/anybody</code> та інші команди\n\n"
+                    "💡 Синхронізація відбувається автоматично щоночі о 03:00, але для першого запуску краще зробити вручну.\n\n"
+                    "❓ Всі команди: /help",
+                    parse_mode="HTML"
+                )
+        
         # Реєстрація роутерів
         self._register_routers()
     
