@@ -55,10 +55,11 @@ class ChatRepository:
         """Saves user activity"""
         self.activity.save_user_activity(chat_id, user_id, name, source, profile_time)
         
-        # Handle unreg clearing (v2.2.0 fix integrated)
+        # Handle unreg clearing (v2.3.1 fix: only temp_unreg, NOT super_unreg!)
         if update_unreg and source == "message":
-            self.unreg.remove_from_unreg(chat_id, user_id)
-            # Also clear from global temp
+            # Super_unreg is PERMANENT - only cleared by explicit /reg command
+            self.unreg.remove_from_temp_unreg(chat_id, user_id)
+            # Also clear from global temp (NOT global super!)
             data = self.storage.load()
             user_id = str(user_id)
             if "global_unreg" in data and user_id in data.get("global_unreg", {}).get("temp", []):
@@ -105,7 +106,12 @@ class ChatRepository:
     def add_to_super_unreg(self, chat_id: str, user_id: str) -> bool:
         return self.unreg.add_to_super_unreg(chat_id, user_id)
     
+    def remove_from_temp_unreg(self, chat_id: str, user_id: str) -> bool:
+        """Removes from temp_unreg only (for middleware - doesn't touch super_unreg)"""
+        return self.unreg.remove_from_temp_unreg(chat_id, user_id)
+    
     def remove_from_unreg(self, chat_id: str, user_id: str) -> bool:
+        """Removes from BOTH temp and super (for /reg command)"""
         return self.unreg.remove_from_unreg(chat_id, user_id)
     
     def add_to_global_unreg(self, user_id: str, is_super: bool = False) -> None:

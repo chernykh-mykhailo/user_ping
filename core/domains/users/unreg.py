@@ -43,7 +43,7 @@ class UnregDomain:
         
         if user_id not in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].append(user_id)
-            self.storage.save(data)
+            self.storage.save(data, force=True)  # Force immediate disk write
             return True
         return False
     
@@ -71,13 +71,35 @@ class UnregDomain:
         
         if user_id not in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].append(user_id)
-            self.storage.save(data)
+            self.storage.save(data, force=True)  # Force immediate disk write
+            return True
+        return False
+    
+    def remove_from_temp_unreg(self, chat_id: str, user_id: str) -> bool:
+        """
+        Removes user from ONLY temp_unreg (called by middleware on message activity)
+        Super_unreg is permanent and NOT affected by message activity!
+        
+        Returns:
+            True if removed, False if wasn't in temp_unreg
+        """
+        user_id = str(user_id)
+        data = self.storage.load()
+        
+        if chat_id not in data:
+            return False
+        if "temp_unreg" not in data[chat_id]:
+            data[chat_id]["temp_unreg"] = []
+        
+        if user_id in data[chat_id].get("temp_unreg", []):
+            data[chat_id]["temp_unreg"].remove(user_id)
+            self.storage.save(data, force=True)
             return True
         return False
     
     def remove_from_unreg(self, chat_id: str, user_id: str) -> bool:
         """
-        Removes user from BOTH temp and super unreg
+        Removes user from BOTH temp and super unreg (called by /reg command)
         
         Returns:
             True if removed from any list, False if wasn't in unreg
@@ -102,7 +124,7 @@ class UnregDomain:
             removed = True
         
         if removed:
-            self.storage.save(data)
+            self.storage.save(data, force=True)  # Force immediate disk write
         return removed
     
     def is_in_unreg(self, chat_id: str, user_id: str) -> Dict[str, bool]:
@@ -146,7 +168,7 @@ class UnregDomain:
             
         if user_id not in data["global_unreg"][target]:
             data["global_unreg"][target].append(user_id)
-            self.storage.save(data)
+            self.storage.save(data, force=True)  # Force immediate disk write
     
     def remove_from_global_unreg(self, user_id: str) -> bool:
         """
@@ -170,7 +192,7 @@ class UnregDomain:
             removed = True
             
         if removed:
-            self.storage.save(data)
+            self.storage.save(data, force=True)  # Force immediate disk write
         return removed
     
     def is_globally_unreg(self, user_id: str) -> Dict[str, bool]:

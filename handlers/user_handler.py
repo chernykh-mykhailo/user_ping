@@ -431,6 +431,8 @@ class UserHandler(BaseHandler):
     async def cmd_superunreg(self, message: Message):
         """Постійно вимикає пінги (тільки з Premium)"""
         user_id = str(message.from_user.id)
+        chat_id = get_clean_chat_id(message.chat.id)
+        self.logger.info(f"Команда SUPERUNREG від {user_id} у чаті {chat_id}")
         
         # Перевірка преміуму
         if not self.premium_repo.has_premium(user_id):
@@ -447,7 +449,6 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent, custom_delay=30)
             return
         
-        chat_id = get_clean_chat_id(message.chat.id)
         added = self.chat_repo.add_to_super_unreg(chat_id, user_id)
         
         if added:
