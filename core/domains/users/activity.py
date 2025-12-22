@@ -105,6 +105,8 @@ class UserActivityDomain:
             Dict[user_id, name] sorted by most recent activity
         """
         from core.domains.users.unreg import UnregDomain
+        import logging
+        logger = logging.getLogger(__name__)
         
         chat_data = self._get_chat_data(chat_id)
         all_users_raw = chat_data.get("users", {})
@@ -112,10 +114,20 @@ class UserActivityDomain:
         # Get unreg sets (delegating to UnregDomain would be circular, so we read directly)
         temp_unreg, super_unreg, global_unreg, global_super = self._get_unreg_sets(chat_id)
         
+        # DEBUG: Log unreg info
+        logger.info(f"[UNREG DEBUG] chat_id={chat_id}")
+        logger.info(f"[UNREG DEBUG] temp_unreg={temp_unreg}")
+        logger.info(f"[UNREG DEBUG] super_unreg={super_unreg}")
+        logger.info(f"[UNREG DEBUG] global_unreg={global_unreg}")
+        logger.info(f"[UNREG DEBUG] global_super={global_super}")
+        logger.info(f"[UNREG DEBUG] total_users={len(all_users_raw)}")
+        
         # Filter unregs
         active_list = []
+        filtered_count = 0
         for uid, val in all_users_raw.items():
             if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                filtered_count += 1
                 continue
             
             # Handle both old and new format
@@ -128,6 +140,8 @@ class UserActivityDomain:
             # Use max of both
             actual_seen = max(last_seen, profile_seen)
             active_list.append((uid, name, actual_seen))
+        
+        logger.info(f"[UNREG DEBUG] filtered_count={filtered_count}, active_count={len(active_list)}")
             
         # Sort: freshest timestamps first
         active_list.sort(key=lambda x: x[2], reverse=True)

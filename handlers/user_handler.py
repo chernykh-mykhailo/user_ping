@@ -38,9 +38,9 @@ class UserHandler(BaseHandler):
         # Contact
         self.router.message(Command("feedback", "contact"))(self.cmd_feedback)
         
-        # Unreg/Reg
+        # Unreg/Reg - regex catches "анрег" with optional leading space and text after
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r'^!?анрег', flags=0))(self.cmd_unreg)
+        self.router.message(F.text.regexp(r'^\s*!?анрег(\s|$)', flags=0))(self.cmd_unreg)
         
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
         self.router.message(F.text.regexp(r'^!?суперанрег', flags=0))(self.cmd_superunreg)

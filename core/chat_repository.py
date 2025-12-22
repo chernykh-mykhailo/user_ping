@@ -5,7 +5,7 @@ Will be removed in v2.4.0 after all handlers are updated
 """
 from typing import Dict, List, Optional, Any
 from config import ADMIN_USER_ID
-from core.storage import JSONStorage
+# Note: We use JSONDatabase directly from db parameter, not JSONStorage
 from core.domains import (
     UserActivityDomain,
     UnregDomain,
@@ -33,13 +33,14 @@ class ChatRepository:
         Initializes all domain instances
         
         Args:
-            db: Old JSONDatabase instance (for compatibility)
-                We extract filepath and create JSONStorage
+            db: JSONDatabase instance - we use it DIRECTLY to avoid cache issues
         """
-        # Convert old JSONDatabase to new JSONStorage
-        self.storage = JSONStorage(db.filepath)
+        # CRITICAL: Use the SAME db instance, not a new JSONStorage!
+        # Creating new storage causes cache desync between old and new code
+        self.storage = db  # db is JSONDatabase, compatible with our domains
+        self.db = db
         
-        # Initialize all domains
+        # Initialize all domains with the same storage
         self.activity = UserActivityDomain(self.storage)
         self.unreg = UnregDomain(self.storage)
         self.staff = StaffRolesDomain(self.storage, ADMIN_USER_ID)
@@ -47,9 +48,6 @@ class ChatRepository:
         self.triggers_groups = CallGroupsDomain(self.storage)
         self.chat_settings = ChatSettingsDomain(self.storage)
         self.global_config = GlobalConfigDomain(self.storage)
-        
-        # Keep reference to old db for compatibility
-        self.db = db
     
     # === User Activity (delegates to ActivityDomain) ===
     
