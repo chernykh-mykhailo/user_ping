@@ -229,39 +229,41 @@ class UserHandler(BaseHandler):
         elif section == "pings":
             text = (
                 "<b>📢 Пінги</b>\n\n"
+                "<b>Гібридні виклики (рекомендовано):</b>\n"
+                "• <code>!активні</code> або /active — В мережі + хто писав (24г)\n"
+                "• <code>!актив_тиждень</code> або /active_week — Гібрид за тиждень\n\n"
+                "<b>Точні виклики:</b>\n"
+                "• <code>!писали</code> або /writers — Тільки ті, хто відправив повідомлення\n"
+                "• <code>!онлайн</code> або /online — Тільки ті, хто зараз в мережі\n\n"
                 "<b>Базові виклики:</b>\n"
-                "• <code>!кнагє</code> або /all [текст] — Заклик усіх\n"
-                "• <code>слово</code> (кастомне) — Заклик усіх (див. Тригери)\n"
-                "• <code>!емодзі</code> або /emoji [текст] — Заклик емодзі\n"
-                "• <code>!адміни</code> або /admins [текст] — Заклик адмінів\n"
-                "• <code>!хтось</code> або /anybody [текст] — Випадковий учасник\n"
-                "• <code>!стоп</code> або /stop — Зупинити виклик\n\n"
+                "• <code>!всі</code> або /all — Заклик усіх (включаючи офлайн)\n"
+                "• <code>!емодзі</code> або /emoji — Заклик усіх (емодзі)\n"
+                "• <code>!адміни</code> або /admins — Заклик тільки адміністраторів\n"
+                "• <code>!хтось</code> або /anybody — Випадковий учасник\n\n"
                 "<b>Налаштування:</b>\n"
-                "• <code>!анрег</code> або /unreg — Вимкнути пінги (тимчасово)\n"
-                "• <code>!суперанрег</code> або /superunreg — Вимкнути назавжди (Premium)\n"
-                "• <code>!рег</code> або /reg — Увімкнути пінги назад"
+                "• <code>!анрег</code> або /unreg — Тимчасово не пінгувати мене\n"
+                "• <code>!рег</code> або /reg — Повернутися в списки\n"
+                "• <code>!стоп</code> — Зупинити поточний виклик"
             )
             await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
         
         elif section == "triggers":
             text = (
                 "<b>🎯 Тригери викликів</b>\n\n"
-                "<i>Вибіркові та кастомні виклики</i>\n\n"
+                "<b>Створення тригерів-викликів:</b>\n"
+                "• <code>!addtrigger слово</code> — Пінг усіх (текстом)\n"
+                "• <code>!addemojitrigger слово</code> — Пінг усіх (емодзі)\n"
+                "• <code>!addactivetrigger слово</code> — Гібридний актив (24г)\n"
+                "• <code>!addactiveweektrigger слово</code> — Гібридний актив (тиждень)\n"
+                "• <code>!addwritertrigger слово</code> — Тільки ті, хто писав\n"
+                "• <code>!addonlinetrigger слово</code> — Тільки ті, хто онлайн\n\n"
                 "<b>Управління групами користувачів:</b>\n"
                 "• <code>!calls</code> — Список тригерів груп\n"
                 "• <code>!addcall назва емодзі</code> — Створити групу\n"
-                "• <code>!delcall назва</code> — Видалити групу\n"
-                "• <code>!callinfo назва</code> — Інфо про групу\n"
-                "• <code>!adduser назва</code> — Додати юзера в групу\n"
-                "• <code>!deluser назва</code> — Видалити юзера з групи\n\n"
-                "<b>Кастомні слова-виклики (для всіх):</b>\n"
-                "• <code>!addtrigger слово</code> — Додати слово для виклику ВСІХ\n"
-                "• <code>!addemojitrigger слово</code> — Додати слово для EMOJI-виклику\n"
-                "• <code>!deltrigger слово</code> — Видалити слово-виклик\n"
-                "• <code>!triggers</code> — Список слів-викликів\n\n"
-                "<b>Використання:</b>\n"
-                "• <code>!назва_групи</code> — Викликати групу\n"
-                "• <code>слово</code>, <code>!слово</code>, <code>/слово</code> — Викликати всіх"
+                "• <code>!delcall назва</code> — Видалити групу\n\n"
+                "<b>Загальне управління:</b>\n"
+                "• <code>!triggers</code> — Список усіх кастомних слів\n"
+                "• <code>!deltrigger слово</code> — Видалити слово-виклик"
             )
             await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
         
@@ -409,12 +411,16 @@ class UserHandler(BaseHandler):
         # Перевірка преміуму
         if not self.premium_repo.has_premium(user_id):
             sent = await message.answer(
-                "🚫 <b>Доступ заборонено</b>\n\n"
-                "Команда /superunreg доступна тільки з 👑 Premium статусом.\n\n"
-                "Купити Premium: /premium",
+                "👑 <b>PREMIUM REQUIRED</b>\n\n"
+                "Функція <b>SuperUnreg</b> дозволяє назавжди зникнути з радарів пінгу в цьому чаті.\n\n"
+                "✨ <b>Переваги Premium:</b>\n"
+                "• Повний ігнор будь-яких викликів\n"
+                "• Пріоритет в обробці команд\n"
+                "• Підтримка розвитку проекту\n\n"
+                "💎 Придбати: /premium",
                 parse_mode="HTML"
             )
-            await self.auto_cleanup(message, sent)
+            await self.auto_cleanup(message, sent, custom_delay=30)
             return
         
         chat_id = get_clean_chat_id(message.chat.id)
@@ -422,12 +428,16 @@ class UserHandler(BaseHandler):
         
         if added:
             sent = await message.answer(
-                "🚫 Пінги вимкнено назавжди. Використайте /reg або !рег для повернення."
+                "🛡 <b>SUPER UNREG: АКТИВОВАНО</b>\n\n"
+                "💎 Ви успішно використали свій <b>Premium</b> статус. Тепер учасники не зможуть пінгнути вас у цьому чаті, навіть якщо ви будете активні.\n\n"
+                "<i>Повернутися: /reg</i>",
+                parse_mode="HTML"
             )
         else:
-            sent = await message.answer("ℹ️ Ви вже в режимі постійного анрегу.")
+            sent = await message.answer("ℹ️ <b>Ви вже захищені SuperUnreg у цьому чаті.</b>", parse_mode="HTML")
         
-        await self.auto_cleanup(message, sent)
+        # SuperUnreg повідомлення висять довше (60с), щоб всі бачили статус
+        await self.auto_cleanup(message, sent, custom_delay=60)
     
     async def cmd_reg(self, message: Message):
         """Увімкнює пінги назад"""
@@ -491,23 +501,24 @@ class UserHandler(BaseHandler):
         
         if not self.premium_repo.has_premium(user_id):
             sent = await message.answer(
-                "❌ <b>Тільки для Premium користувачів!</b>\n\n"
-                "Глобальний SuperUnreg дозволяє вимкнути пінги в усіх чатах назавжди.\n"
-                "Придбати: /premium",
+                "👑 <b>GLOBAL PREMIUM FEATURE</b>\n\n"
+                "<b>Глобальний SuperUnreg</b> — це ультимативне рішення. Ви зникаєте з усіх пінгувань у всіх чатах одночасно.\n\n"
+                "💎 Придбати доступ: /premium",
                 parse_mode="HTML"
             )
-            await self.auto_cleanup(message, sent)
+            await self.auto_cleanup(message, sent, custom_delay=30)
             return
 
         self.chat_repo.add_to_global_unreg(user_id, is_super=True)
         
         sent = await message.answer(
-            "🚫 <b>Глобальний SuperUnreg активовано!</b>\n\n"
-            "Ви більше <b>ніколи</b> не отримуватимете пінги в жодному чаті, "
-            "поки не напишете команду /greg або /reg.",
+            "🌌 <b>GLOBAL SUPER UNREG</b>\n\n"
+            "✨ <b>Статус: УЛЬТИМАТИВНИЙ ЗАХИСТ</b>\n"
+            "Ви повністю приховані від усіх типів пінгування (all, active, writers тощо) в усіх чатах, де присутній бот.\n\n"
+            "<i>Зняти захист: /greg</i>",
             parse_mode="HTML"
         )
-        await self.auto_cleanup(message, sent)
+        await self.auto_cleanup(message, sent, custom_delay=60)
 
     async def cmd_global_reg(self, message: Message):
         """Увімкнення пінгів у всіх чатах відразу"""

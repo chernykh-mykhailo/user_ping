@@ -49,6 +49,20 @@ class AdminHandler(BaseHandler):
         self.router.message(Command("admin_del_trigger"))(self.cmd_admin_del_trigger)
         self.router.message(Command("admin_toggle_userbot"))(self.cmd_admin_toggle_userbot)
         
+        # Admin management (v1.9.8)
+        self.router.message(Command("admin_add"))(self.cmd_admin_add)
+        self.router.message(Command("admin_del"))(self.cmd_admin_del)
+        self.router.message(Command("admin_list"))(self.cmd_admin_list)
+        
+        self.router.message(Command("owner_add"))(self.cmd_owner_add)
+        self.router.message(Command("owner_del"))(self.cmd_owner_del)
+        
+        self.router.message(Command("mod_add"))(self.cmd_mod_add)
+        self.router.message(Command("mod_del"))(self.cmd_mod_del)
+        
+        self.router.message(Command("admod_add"))(self.cmd_admod_add)
+        self.router.message(Command("admod_del"))(self.cmd_admod_del)
+        
         # Userbot Login Flow (v1.7.0)
         self.router.message(Command("ub_login"))(self.cmd_ub_login)
         self.router.callback_query(F.data.startswith("ub_acc_"))(self.process_account_selection)
@@ -168,8 +182,8 @@ class AdminHandler(BaseHandler):
         self.logger.info(f"Відправлено статистику: {stats['total']} осіб")
 
     async def cmd_admin_settings(self, message: Message):
-        """Встановлює глобальні налаштування (тільки власник)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Встановлює глобальні налаштування (адміни бота)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         args = message.text.split()
@@ -206,8 +220,8 @@ class AdminHandler(BaseHandler):
                 await self._safe_answer(message, "❌ Введіть коректне число (наприклад: 0.5)")
 
     async def cmd_ahelp(self, message: Message):
-        """Швидка допомога для власника"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Швидка допомога для власника та адмінів"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         help_text = (
@@ -236,8 +250,8 @@ class AdminHandler(BaseHandler):
         await self._safe_answer(message, help_text, parse_mode="HTML")
 
     async def cmd_admin_add_trigger(self, message: Message):
-        """Додає глобальний тригер (Owner only)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Додає глобальний тригер (Bot Admins)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         args = message.text.split()
@@ -247,15 +261,16 @@ class AdminHandler(BaseHandler):
             
         trigger = args[1].lower()
         type_ = args[2].lower() if len(args) > 2 else "text"
-        if type_ not in ["text", "emoji"]:
+        allowed_types = ["text", "emoji", "active", "active_week", "writers", "online"]
+        if type_ not in allowed_types:
             type_ = "text"
             
         self.chat_repo.add_global_ping_trigger(trigger, type_)
-        await message.answer(f"✅ Global Trigger '{trigger}' added as {type_}")
+        await message.answer(f"✅ Global Trigger '{trigger}' added as {type_}\nAllowed types: {', '.join(allowed_types)}")
 
     async def cmd_admin_del_trigger(self, message: Message):
-        """Видаляє глобальний тригер (Owner only)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Видаляє глобальний тригер (Bot Admins)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         args = message.text.split()
@@ -271,7 +286,7 @@ class AdminHandler(BaseHandler):
 
     async def cmd_admin_toggle_userbot(self, message: Message):
         """Перемикає використання юзербота (Global)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         current = self.chat_repo.get_global_setting("use_userbot", True)
@@ -299,8 +314,8 @@ class AdminHandler(BaseHandler):
     # === Userbot Login Flow Handlers ===
 
     async def cmd_ub_login(self, message: Message, state: FSMContext):
-        """Починає процес авторизації юзербота (v1.7.0)"""
-        if message.from_user.id != ADMIN_USER_ID:
+        """Починає процес авторизації юзербота (Bot Admins)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         await state.set_state(LoginStates.waiting_for_account)
@@ -382,7 +397,7 @@ class AdminHandler(BaseHandler):
 
     async def process_auth_phone(self, message: Message, state: FSMContext):
         """Обробляє номер телефону"""
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         phone = message.text.strip().replace(" ", "")
@@ -433,7 +448,7 @@ class AdminHandler(BaseHandler):
 
     async def process_auth_code(self, message: Message, state: FSMContext):
         """Обробляє код підтвердження"""
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         code = message.text.strip().replace(" ", "")
@@ -479,6 +494,9 @@ class AdminHandler(BaseHandler):
 
     async def process_auth_password(self, message: Message, state: FSMContext):
         """Обробляє 2FA пароль"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
+            return
+            
         password = message.text.strip()
         
         try:
@@ -491,3 +509,154 @@ class AdminHandler(BaseHandler):
             self.logger.error(f"Error signing in with password: {e}")
             await self._safe_answer(message, f"❌ Невірний пароль або інша помилка: {e}\nСпробуйте знову: /ub_login")
             await state.clear()
+
+
+    # === Admin Management Commands (Owner Only) ===
+
+    async def cmd_admin_add(self, message: Message):
+        """Додає нового адміна бота (тільки власник)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2:
+            await message.answer("Usage: /admin_add [user_id]")
+            return
+            
+        try:
+            target_id = int(args[1])
+            self.chat_repo.add_bot_admin(target_id)
+            await message.answer(f"✅ Користувача <code>{target_id}</code> додано до адмінів бота.", parse_mode="HTML")
+        except ValueError:
+            await message.answer("❌ Введіть коректний User ID (число).")
+
+    async def cmd_admin_del(self, message: Message):
+        """Видаляє адміна бота (тільки власник)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2:
+            await message.answer("Usage: /admin_del [user_id]")
+            return
+            
+        try:
+            target_id = int(args[1])
+            if self.chat_repo.remove_bot_admin(target_id):
+                await message.answer(f"✅ Користувача <code>{target_id}</code> видалено з адмінів бота.", parse_mode="HTML")
+            else:
+                await message.answer("❌ Користувача не знайдено в списку адмінів.")
+        except ValueError:
+            await message.answer("❌ Введіть коректний User ID (число).")
+
+    async def cmd_admin_list(self, message: Message):
+        """Показує список усього стаффу бота"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
+            return
+            
+        owners = self.chat_repo.get_bot_owners()
+        admins = self.chat_repo.get_bot_admins()
+        mods = self.chat_repo.get_bot_moderators()
+        ad_mods = self.chat_repo.get_ad_moderators()
+        super_owner = ADMIN_USER_ID
+        
+        text = "Staff List:\n\n"
+        text += f"⭐️ <b>SuperOwner:</b> <code>{super_owner}</code>\n"
+        
+        if owners:
+            text += "👑 <b>Власники (Owners):</b>\n"
+            for o in owners: text += f"• <code>{o}</code>\n"
+            text += "\n"
+            
+        if admins:
+            text += "👨‍💻 <b>Адміни:</b>\n"
+            for a in admins: text += f"• <code>{a}</code>\n"
+            text += "\n"
+            
+        if mods:
+            text += "🛡 <b>Модератори:</b>\n"
+            for m in mods: text += f"• <code>{m}</code>\n"
+            text += "\n"
+            
+        if ad_mods:
+            text += "📢 <b>Модератори реклами:</b>\n"
+            for am in ad_mods: text += f"• <code>{am}</code>\n"
+            text += "\n"
+            
+        await message.answer(text, parse_mode="HTML")
+
+    async def cmd_owner_add(self, message: Message):
+        """Додає додаткового власника (тільки SuperOwner)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /owner_add [user_id]")
+        
+        try:
+            target_id = int(args[1])
+            self.chat_repo.add_bot_owner(target_id)
+            await message.answer(f"✅ Користувача <code>{target_id}</code> додано як <b>Власника</b>.", parse_mode="HTML")
+        except: await message.answer("❌ Помилка")
+
+    async def cmd_owner_del(self, message: Message):
+        """Видаляє власника (тільки SuperOwner)"""
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+            
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /owner_del [user_id]")
+        
+        try:
+            target_id = int(args[1])
+            if self.chat_repo.remove_bot_owner(target_id):
+                await message.answer(f"✅ Користувача <code>{target_id}</code> видалено зі списку власників.", parse_mode="HTML")
+            else:
+                await message.answer("❌ Власника не знайдено.")
+        except: await message.answer("❌ Помилка")
+
+    async def cmd_mod_add(self, message: Message):
+        """Додає модератора (Admin+)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id): return
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /mod_add [id]")
+        try:
+            target_id = int(args[1])
+            self.chat_repo.add_bot_moderator(target_id)
+            await message.answer(f"✅ Користувача <code>{target_id}</code> додано до модераторів.", parse_mode="HTML")
+        except: await message.answer("❌ Error")
+
+    async def cmd_mod_del(self, message: Message):
+        """Видаляє модератора (Admin+)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id): return
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /mod_del [id]")
+        try:
+            target_id = int(args[1])
+            if self.chat_repo.remove_bot_moderator(target_id):
+                await message.answer("✅ Видалено.")
+            else: await message.answer("❌ Не знайдено.")
+        except: await message.answer("❌ Error")
+
+    async def cmd_admod_add(self, message: Message):
+        """Додає адмода (Admin+)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id): return
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /admod_add [id]")
+        try:
+            target_id = int(args[1])
+            self.chat_repo.add_ad_moderator(target_id)
+            await message.answer(f"✅ Додано до реклами: <code>{target_id}</code>", parse_mode="HTML")
+        except: await message.answer("❌ Error")
+
+    async def cmd_admod_del(self, message: Message):
+        """Видаляє адмода (Admin+)"""
+        if not self.chat_repo.is_bot_admin(message.from_user.id): return
+        args = message.text.split()
+        if len(args) < 2: return await message.answer("Usage: /admod_del [id]")
+        try:
+            target_id = int(args[1])
+            if self.chat_repo.remove_ad_moderator(target_id):
+                await message.answer("✅ Видалено з реклами.")
+            else: await message.answer("❌ Не знайдено.")
+        except: await message.answer("❌ Error")

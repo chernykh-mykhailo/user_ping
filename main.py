@@ -11,6 +11,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault
 
 # Version
 from __version__ import __version__
+from datetime import datetime, timedelta
 
 # Конфігурація
 from config import (
@@ -132,6 +133,10 @@ class PingBot:
         """Встановлює команди бота для меню"""
         commands = [
             BotCommand(command="all", description="📢 Викликати всіх"),
+            BotCommand(command="active", description="🔥 Тільки активні (24г)"),
+            BotCommand(command="active_week", description="📅 Актив за тиждень"),
+            BotCommand(command="writers", description="✍️ Ті, хто писав"),
+            BotCommand(command="online", description="🌐 Ті, хто онлайн"),
             BotCommand(command="stop", description="🛑 Зупинити виклик"),
             BotCommand(command="settings", description="⚙️ Налаштування"),
             BotCommand(command="stats", description="📊 Статистика"),
@@ -239,6 +244,9 @@ class PingBot:
             # Обробляємо накопичені повідомлення
             await self._handle_pending_updates()
             
+            # Запускаємо фонові завдання (v1.9.0)
+            asyncio.create_task(self._nightly_sync_task())
+            
             self.logger.info("=" * 50)
             self.logger.info(f"🚀 TELEGRAM PING BOT v{__version__}")
             self.logger.info("=" * 50)
@@ -248,7 +256,56 @@ class PingBot:
             
         except Exception as e:
             self.logger.error(f"Критична помилка: {e}")
-            raise
+    async def _nightly_sync_task(self):
+        """Фонове завдання для нічної синхронізації (v1.9.0)"""
+        self.logger.info("Нічне фонове завдання синхронізації активовано")
+        
+        while True:
+            try:
+                # Обчислюємо час до 03:00 ночі
+                now = datetime.now()
+                target = now.replace(hour=3, minute=0, second=0, microsecond=0)
+                
+                if now >= target:
+                    target += timedelta(days=1)
+                
+                wait_seconds = (target - now).total_seconds()
+                self.logger.info(f"Наступна синхронізація запланована на {target} (через {wait_seconds/3600:.1f} год)")
+                
+                await asyncio.sleep(wait_seconds)
+                
+                if not self.use_userbot:
+                    continue
+
+                self.logger.info("🌙 Починаю планову нічну синхронізацію...")
+                
+                # Отримуємо всі чати з бази
+                chats = self.chat_repo.get_all_chats()
+                
+                for chat_id_str in chats:
+                    try:
+                        # Перетворюємо ID для Telethon (число)
+                        try:
+                            # Більшість ID чатів у Telegram - від'ємні числа
+                            target_id = int(chat_id_str)
+                        except:
+                            target_id = chat_id_str # Якщо це username (рідко для бази)
+
+                        self.logger.info(f"🔄 Синхронізація чату {chat_id_str}...")
+                        await self.userbot.sync_participants(target_id)
+                        
+                        # Анти-флуд затримка 30 сек між чатами
+                        await asyncio.sleep(30)
+                    except Exception as e:
+                        self.logger.error(f"❌ Помилка синхронізації чату {chat_id_str}: {e}")
+                
+                self.logger.info("✅ Планова нічна синхронізація завершена")
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"⚠️ Помилка у фоновому завданні: {e}")
+                await asyncio.sleep(3600) # Чекаємо годину при помилці
     
     async def stop(self):
         """Зупиняє бота"""

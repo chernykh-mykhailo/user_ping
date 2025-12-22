@@ -244,7 +244,7 @@ class PaymentHandler(BaseHandler):
         Адмін-команда: Додає платіж вручну
         Формат: /admin_add_payment <user_id> <amount> [charge_id]
         """
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
         
         parts = message.text.split()
@@ -287,7 +287,7 @@ class PaymentHandler(BaseHandler):
         Адмін-команда: Показує всі платежі користувача
         Формат: /admin_payments <user_id>
         """
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
         
         parts = message.text.split()
@@ -334,7 +334,7 @@ class PaymentHandler(BaseHandler):
         - /admin_grant_premium @username <days>
         - /admin_grant_premium <days> (у відповідь на повідомлення)
         """
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
         
         parts = message.text.split()
@@ -490,7 +490,7 @@ class PaymentHandler(BaseHandler):
         - /admin_revoke_premium @username
         - /admin_revoke_premium (у відповідь на повідомлення)
         """
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
         
         parts = message.text.split()
@@ -609,7 +609,7 @@ class PaymentHandler(BaseHandler):
 
     async def cmd_admin_help(self, message: Message):
         """Показує довідку для адмінів бота"""
-        if message.from_user.id != ADMIN_USER_ID:
+        if not self.chat_repo.is_bot_admin(message.from_user.id):
             return
             
         help_text = (

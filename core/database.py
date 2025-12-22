@@ -109,50 +109,71 @@ class ChatRepository:
                 "super_unreg": []
             }
             self.db.save(data)
-        return data[chat_id]
+    def get_all_chats(self) -> List[str]:
+        """Повертає список ID всіх чатів у базі"""
+        data = self.db.load()
+        return [cid for cid in data.keys() if cid != "global_unreg"]
     
-    def save_user(self, chat_id: str, user_id: str, name: str, update_unreg: bool = True) -> None:
-        """Зберігає користувача та оновлює його ім'я"""
+    def save_user(self, chat_id: str, user_id: str, name: str, update_unreg: bool = True, source: str = "message", profile_time: str = None) -> None:
+        """
+        Зберігає користувача. 
+        source: 'message' (повідомлення в чаті) або 'profile' (статус в профілі)
+        """
         data = self.db.load()
         
         if chat_id not in data:
             data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
         
         if "users" not in data[chat_id]:
-            # Міграція для старих структур
             if isinstance(data[chat_id], dict) and "users" not in data[chat_id]:
                 data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": []}
         
         # Екранування HTML
         safe_name = name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
-        # Оновлюємо дані користувача
-        now = datetime.now()
+        now = datetime.now().isoformat()
+        user_entry = data[chat_id]["users"].get(user_id, {})
         
-        # v1.7.0 Throttle: не оновлюємо частіше ніж раз на 5 хвилин
-        if user_id in data[chat_id]["users"]:
-            old_val = data[chat_id]["users"][user_id]
-            if isinstance(old_val, dict) and "last_seen" in old_val:
-                last_seen = datetime.fromisoformat(old_val["last_seen"])
-                if (now - last_seen).total_seconds() < 300: # 5 хвилин
-                    return # Скіпаємо запис, людина і так "свіжа"
+        if not isinstance(user_entry, dict):
+            user_entry = {"name": safe_name[:20], "last_seen": "2000-01-01T00:00:00"}
 
-        user_data = {
-            "name": safe_name[:20],
-            "last_seen": now.isoformat()
-        }
-        
-        data[chat_id]["users"][user_id] = user_data
-        
-        if update_unreg:
-            # Знімаємо тимчасовий анрег якщо користувач написав (активність)
-            if user_id in data[chat_id].get("temp_unreg", []):
-                data[chat_id]["temp_unreg"].remove(user_id)
-                
-            # Знімаємо ГЛОБАЛЬНИЙ тимчасовий анрег
-            if "global_unreg" in data and user_id in data["global_unreg"].get("temp", []):
-                data["global_unreg"]["temp"].remove(user_id)
-        
+        # v1.8.5: Розподілена логіка запису
+        if source == "message":
+            # Перевірка дроселя (5 хв)
+            last_seen_str = user_entry.get("last_seen", "2000-01-01T00:00:00")
+            try:
+                last_seen_dt = datetime.fromisoformat(last_seen_str)
+                if (datetime.now() - last_seen_dt).total_seconds() < 300:
+                    # Оновлюємо ім'я якщо воно змінилось
+                    if user_entry.get("name") != safe_name[:20]:
+                        user_entry["name"] = safe_name[:20]
+                        data[chat_id]["users"][user_id] = user_entry
+                        self.db.save(data)
+                    return
+            except:
+                pass
+
+            user_entry["last_seen"] = now
+            user_entry["name"] = safe_name[:20]
+            
+            # Знімаємо анрег тільки при ПОВІДОМЛЕННІ
+            if update_unreg:
+                if user_id in data[chat_id].get("temp_unreg", []):
+                    data[chat_id]["temp_unreg"].remove(user_id)
+                if "global_unreg" in data and user_id in data["global_unreg"].get("temp", []):
+                    data["global_unreg"]["temp"].remove(user_id)
+        else:
+            # Source: profile (синхронізація або статус)
+            p_time = profile_time or now
+            # Оновлюємо profile_seen тільки якщо він новіший
+            old_p_time = user_entry.get("profile_seen", "2000-01-01T00:00:00")
+            if p_time > old_p_time:
+                user_entry["profile_seen"] = p_time
+            
+            # Оновлюємо ім'я завжди при синхронізації
+            user_entry["name"] = safe_name[:20]
+
+        data[chat_id]["users"][user_id] = user_entry
         self.db.save(data)
     
     def remove_user(self, chat_id: str, user_id: str) -> None:
@@ -164,7 +185,7 @@ class ChatRepository:
                 self.db.save(data)
     
     async def get_active_users(self, chat_id: str) -> Dict[str, str]:
-        """Повертає активних користувачів (без анрегів), відсортованих за активністю"""
+        """Повертає активних користувачів (без анрегів), відсортованих за активністю (повідомлення або статус)"""
         chat_data = self.get_chat_data(chat_id)
         
         all_users_raw = chat_data.get("users", {})
@@ -184,8 +205,14 @@ class ChatRepository:
             
             # Обробляємо і старий, і новий формат
             name = val["name"] if isinstance(val, dict) else val
+            
+            # Вибираємо найкращий таймстамп (v1.8.5)
             last_seen = val.get("last_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
-            active_list.append((uid, name, last_seen))
+            profile_seen = val.get("profile_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            
+            # Використовуємо максимум з двох
+            actual_seen = max(last_seen, profile_seen)
+            active_list.append((uid, name, actual_seen))
             
         # Сортуємо: свіжі таунспампи спочатку
         active_list.sort(key=lambda x: x[2], reverse=True)
@@ -562,6 +589,143 @@ class ChatRepository:
         """Повертає глобальні тригери"""
         data = self.db.load()
         return data.get("global_ping_triggers", {})
+
+    # === Bot Owners (v2.1.0) ===
+    
+    def add_bot_owner(self, user_id: int) -> None:
+        """Додає додаткового власника бота (тільки SuperOwner)"""
+        data = self.db.load()
+        if "bot_owners" not in data:
+            data["bot_owners"] = []
+        uid = str(user_id)
+        if uid not in data["bot_owners"]:
+            data["bot_owners"].append(uid)
+            self.db.save(data)
+
+    def remove_bot_owner(self, user_id: int) -> bool:
+        """Видаляє додаткового власника бота"""
+        data = self.db.load()
+        uid = str(user_id)
+        if "bot_owners" in data and uid in data["bot_owners"]:
+            data["bot_owners"].remove(uid)
+            self.db.save(data)
+            return True
+        return False
+
+    def is_owner(self, user_id: int) -> bool:
+        """Перевіряє чи є користувач власником (Super або додатковим)"""
+        from config import ADMIN_USER_ID
+        if user_id == ADMIN_USER_ID:
+            return True
+        data = self.db.load()
+        return str(user_id) in data.get("bot_owners", [])
+
+    def get_bot_owners(self) -> List[str]:
+        data = self.db.load()
+        return data.get("bot_owners", [])
+
+    # === Global Bot Admins (v1.9.8) ===
+    
+    def add_bot_admin(self, user_id: int) -> None:
+        """Додає глобального адміна бота"""
+        data = self.db.load()
+        if "bot_admins" not in data:
+            data["bot_admins"] = []
+        
+        uid = str(user_id)
+        if uid not in data["bot_admins"]:
+            data["bot_admins"].append(uid)
+            self.db.save(data)
+
+    def remove_bot_admin(self, user_id: int) -> bool:
+        """Видаляє глобального адміна бота"""
+        data = self.db.load()
+        uid = str(user_id)
+        if "bot_admins" in data and uid in data["bot_admins"]:
+            data["bot_admins"].remove(uid)
+            self.db.save(data)
+            return True
+        return False
+
+    def is_bot_admin(self, user_id: int) -> bool:
+        """Перевіряє чи є користувач адміном бота (або власником)"""
+        if self.is_owner(user_id):
+            return True
+            
+        data = self.db.load()
+        return str(user_id) in data.get("bot_admins", [])
+
+    def get_bot_admins(self) -> List[str]:
+        """Повертає список ID всіх адмінів бота"""
+        data = self.db.load()
+        return data.get("bot_admins", [])
+
+    # === Bot Moderators (v2.0.0) ===
+    
+    def add_bot_moderator(self, user_id: int) -> None:
+        """Додає модератора бота"""
+        data = self.db.load()
+        if "bot_mods" not in data:
+            data["bot_mods"] = []
+        uid = str(user_id)
+        if uid not in data["bot_mods"]:
+            data["bot_mods"].append(uid)
+            self.db.save(data)
+
+    def remove_bot_moderator(self, user_id: int) -> bool:
+        """Видаляє модератора бота"""
+        data = self.db.load()
+        uid = str(user_id)
+        if "bot_mods" in data and uid in data["bot_mods"]:
+            data["bot_mods"].remove(uid)
+            self.db.save(data)
+            return True
+        return False
+
+    def is_bot_moderator(self, user_id: int) -> bool:
+        """Чи є користувач модератором (або вище)"""
+        # Ієрархія: Owner > Admin > Mod
+        if self.is_bot_admin(user_id):
+            return True
+        data = self.db.load()
+        return str(user_id) in data.get("bot_mods", [])
+
+    def get_bot_moderators(self) -> List[str]:
+        data = self.db.load()
+        return data.get("bot_mods", [])
+
+    # === Ad Moderators (v2.0.0) ===
+    
+    def add_ad_moderator(self, user_id: int) -> None:
+        """Додає модератора реклами"""
+        data = self.db.load()
+        if "ad_mods" not in data:
+            data["ad_mods"] = []
+        uid = str(user_id)
+        if uid not in data["ad_mods"]:
+            data["ad_mods"].append(uid)
+            self.db.save(data)
+
+    def remove_ad_moderator(self, user_id: int) -> bool:
+        """Видаляє модератора реклами"""
+        data = self.db.load()
+        uid = str(user_id)
+        if "ad_mods" in data and uid in data["ad_mods"]:
+            data["ad_mods"].remove(uid)
+            self.db.save(data)
+            return True
+        return False
+
+    def is_ad_moderator(self, user_id: int) -> bool:
+        """Чи є користувач модератором реклами (або вище)"""
+        if self.is_bot_admin(user_id):
+            return True
+        data = self.db.load()
+        return str(user_id) in data.get("ad_mods", [])
+
+    def get_ad_moderators(self) -> List[str]:
+        data = self.db.load()
+        return data.get("ad_mods", [])
 
 
 

@@ -4,6 +4,7 @@ Ping handlers - команди пінгування (SRP)
 import logging
 import asyncio
 import random
+from datetime import datetime, timedelta
 from aiogram import F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -42,6 +43,18 @@ class PingHandler(BaseHandler):
         self.router.message(Command("anybody"))(self.cmd_anybody)
         self.router.message(F.text.regexp(r'^!?хтось', flags=0))(self.cmd_anybody)
         
+        self.router.message(Command("active"))(self.cmd_active)
+        self.router.message(F.text.regexp(r'^!?активні', flags=0))(self.cmd_active)
+        
+        self.router.message(Command("active_week"))(self.cmd_active_week)
+        self.router.message(F.text.regexp(r'^!?актив_тиждень', flags=0))(self.cmd_active_week)
+        
+        self.router.message(Command("writers"))(self.cmd_writers)
+        self.router.message(F.text.regexp(r'^!?писали', flags=0))(self.cmd_writers)
+        
+        self.router.message(Command("online"))(self.cmd_online)
+        self.router.message(F.text.regexp(r'^!?онлайн', flags=0))(self.cmd_online)
+        
         self.router.message(Command("stop", "stopcall"))(self.cmd_stop)
         self.router.message(F.text.regexp(r'^!?стоп', flags=0))(self.cmd_stop)
         
@@ -62,6 +75,10 @@ class PingHandler(BaseHandler):
         # 1. Custom Triggers Management (Specific Commands)
         self.router.message(F.text.startswith("!addtrigger"))(self.cmd_add_custom_trigger)
         self.router.message(F.text.startswith("!addemojitrigger"))(self.cmd_add_custom_emoji_trigger)
+        self.router.message(F.text.startswith("!addactivetrigger"))(self.cmd_add_custom_active_trigger)
+        self.router.message(F.text.startswith("!addactiveweektrigger"))(self.cmd_add_custom_active_week_trigger)
+        self.router.message(F.text.startswith("!addwritertrigger"))(self.cmd_add_custom_writer_trigger)
+        self.router.message(F.text.startswith("!addonlinetrigger"))(self.cmd_add_custom_online_trigger)
         self.router.message(F.text.startswith("!deltrigger"))(self.cmd_del_custom_trigger)
         self.router.message(F.text == "!triggers")(self.cmd_list_custom_triggers)
         
@@ -342,6 +359,132 @@ class PingHandler(BaseHandler):
         await self._send_pings(message.chat.id, admin_users, call_text, use_emoji=False)
         # Чистимо саму команду
         await self.auto_cleanup(message)
+
+    async def cmd_active(self, message: Message):
+        """Пінгує тільки тих, хто був активним останні 24 години"""
+        self.logger.info(f"Отримано команду активного виклику від {message.from_user.id}")
+        
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        parts = message.text.split(maxsplit=1)
+        call_text = parts[1] if len(parts) > 1 else "🔥 Виклик найактивніших!"
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        recent_users = await self._get_recently_active_users(chat_id, hours=24)
+        
+        if not recent_users:
+            sent = await message.answer("ℹ️ За останні 24 години активності не зафіксовано (або всі в анрегу).")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        await self._send_pings(message.chat.id, recent_users, call_text, use_emoji=False)
+        await self.auto_cleanup(message)
+
+    async def cmd_active_week(self, message: Message):
+        """Пінгує тільки тих, хто був активним останні 7 днів"""
+        self.logger.info(f"Отримано команду тижневого активного виклику від {message.from_user.id}")
+        
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        parts = message.text.split(maxsplit=1)
+        call_text = parts[1] if len(parts) > 1 else "📅 Виклик активних за тиждень!"
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        recent_users = await self._get_recently_active_users(chat_id, hours=168) # 7 днів
+        
+        if not recent_users:
+            sent = await message.answer("ℹ️ За останній тиждень активності не зафіксовано.")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        await self._send_pings(message.chat.id, recent_users, call_text, use_emoji=False)
+        await self.auto_cleanup(message)
+
+    async def cmd_writers(self, message: Message):
+        """Пінгує тільки тих, хто реально писав у чат (24г)"""
+        self.logger.info(f"Отримано команду писали від {message.from_user.id}")
+        
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        parts = message.text.split(maxsplit=1)
+        call_text = parts[1] if len(parts) > 1 else "✍️ Виклик тих, хто спілкувався!"
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        users = await self._get_filtered_users(chat_id, source="message", hours=24)
+        
+        if not users:
+            sent = await message.answer("ℹ️ За останні 24 години ніхто не писав (або всі в анрегу).")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        await self.auto_cleanup(message)
+
+    async def cmd_online(self, message: Message):
+        """Пінгує тільки тих, хто онлайн у Telegram (24г)"""
+        self.logger.info(f"Отримано команду онлайн від {message.from_user.id}")
+        
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        parts = message.text.split(maxsplit=1)
+        call_text = parts[1] if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        users = await self._get_filtered_users(chat_id, source="profile", hours=24)
+        
+        if not users:
+            sent = await message.answer("ℹ️ Зараз немає нікого онлайн (нещодавно).")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        await self.auto_cleanup(message)
+
+    async def _get_filtered_users(self, chat_id: str, source: str = "both", hours: int = 24) -> dict:
+        """Внутрішній метод фільтрації за типом активності"""
+        chat_data = self.chat_repo.get_chat_data(chat_id)
+        all_users = chat_data.get("users", {})
+        
+        temp_unreg = set(chat_data.get("temp_unreg", []))
+        super_unreg = set(chat_data.get("super_unreg", []))
+        db_data = self.chat_repo.db.load()
+        global_unreg = set(db_data.get("global_unreg", {}).get("temp", []))
+        global_super = set(db_data.get("global_unreg", {}).get("super", []))
+        
+        threshold = datetime.now() - timedelta(hours=hours)
+        result = {}
+        
+        for uid, val in all_users.items():
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                continue
+            
+            if not isinstance(val, dict): continue
+            
+            ls_str = val.get("last_seen", "2000-01-01T00:00:00")
+            ps_str = val.get("profile_seen", "2000-01-01T00:00:00")
+            
+            ls = datetime.fromisoformat(ls_str)
+            ps = datetime.fromisoformat(ps_str)
+            
+            match_found = False
+            if source == "message" and ls > threshold:
+                match_found = True
+            elif source == "profile" and ps > threshold:
+                match_found = True
+            elif source == "both" and max(ls, ps) > threshold:
+                match_found = True
+                
+            if match_found:
+                result[uid] = val["name"]
+        return result
+
+    async def _get_recently_active_users(self, chat_id: str, hours: int = 24) -> dict:
+        """Повертає користувачів, які були активні останні N годин (Hybrid)"""
+        return await self._get_filtered_users(chat_id, source="both", hours=hours)
     
     async def cmd_anybody(self, message: Message):
         """Викликає випадкового учасника"""
@@ -721,6 +864,30 @@ class PingHandler(BaseHandler):
                 
             if type_ == "emoji":
                 await self._send_pings(message.chat.id, users, call_text, use_emoji=True)
+            elif type_ == "active":
+                recent = await self._get_recently_active_users(chat_id, hours=24)
+                if not recent:
+                    await message.answer("ℹ️ Немає активних учасників за 24г.")
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif type_ == "active_week":
+                recent = await self._get_recently_active_users(chat_id, hours=168)
+                if not recent:
+                    await message.answer("ℹ️ Немає активних учасників за тиждень.")
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif type_ == "writers":
+                recent = await self._get_filtered_users(chat_id, source="message", hours=24)
+                if not recent:
+                    await message.answer("ℹ️ Немає тих, хто писав за 24г.")
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif type_ == "online":
+                recent = await self._get_filtered_users(chat_id, source="profile", hours=24)
+                if not recent:
+                    await message.answer("ℹ️ Немає онлайн за 24г.")
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
             else:
                 await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
             return
@@ -995,6 +1162,70 @@ class PingHandler(BaseHandler):
         self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "emoji")
         await message.answer(f"✅ Додано тригер виклику (емодзі): `{trigger}`", parse_mode="Markdown")
 
+    async def cmd_add_custom_active_trigger(self, message: Message):
+        """Додає кастомний тригер активних користувачів"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addactivetrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "active")
+        await message.answer(f"✅ Додано тригер виклику (активні 24г): `{trigger}`", parse_mode="Markdown")
+
+    async def cmd_add_custom_active_week_trigger(self, message: Message):
+        """Додає кастомний тригер тижневої активності"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addactiveweektrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "active_week")
+        await message.answer(f"✅ Додано тригер виклику (тижневий актив): `{trigger}`", parse_mode="Markdown")
+
+    async def cmd_add_custom_writer_trigger(self, message: Message):
+        """Додає кастомний тригер для тих, хто писав"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addwritertrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "writers")
+        await message.answer(f"✅ Додано тригер виклику (хто писав): `{trigger}`", parse_mode="Markdown")
+
+    async def cmd_add_custom_online_trigger(self, message: Message):
+        """Додає кастомний тригер для тих, хто онлайн"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+            
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Вкажіть слово-тригер: `!addonlinetrigger слово`", parse_mode="Markdown")
+            return
+            
+        trigger = args[1].strip().split()[0]
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "online")
+        await message.answer(f"✅ Додано тригер виклику (онлайн): `{trigger}`", parse_mode="Markdown")
+
     async def cmd_del_custom_trigger(self, message: Message):
         """Видаляє кастомний тригер"""
         if not await self._is_admin(message.chat.id, message.from_user.id):
@@ -1027,7 +1258,13 @@ class PingHandler(BaseHandler):
             
         text = "📝 <b>Кастомні тригери:</b>\n\n"
         for t, type_ in triggers.items():
-            icon = "📢" if type_ == "text" else "🤪"
+            if type_ == "text": icon = "📢"
+            elif type_ == "emoji": icon = "🤪"
+            elif type_ == "active": icon = "🔥"
+            elif type_ == "active_week": icon = "📅"
+            elif type_ == "writers": icon = "✍️"
+            elif type_ == "online": icon = "🌐"
+            else: icon = "❓"
             text += f"• <code>{t}</code> ({icon})\n"
             
         await message.answer(text, parse_mode="HTML")
@@ -1077,5 +1314,33 @@ class PingHandler(BaseHandler):
                 
             if found_type == "emoji":
                 await self._send_pings(message.chat.id, users, call_text, use_emoji=True)
+            elif found_type == "active":
+                recent = await self._get_recently_active_users(chat_id, hours=24)
+                if not recent:
+                    sent = await message.answer("ℹ️ Немає активних учасників за 24г.")
+                    await self.auto_cleanup(sent)
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif found_type == "active_week":
+                recent = await self._get_recently_active_users(chat_id, hours=168)
+                if not recent:
+                    sent = await message.answer("ℹ️ Немає активних учасників за тиждень.")
+                    await self.auto_cleanup(sent)
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif found_type == "writers":
+                recent = await self._get_filtered_users(chat_id, source="message", hours=24)
+                if not recent:
+                    sent = await message.answer("ℹ️ Немає тих, хто писав за 24г.")
+                    await self.auto_cleanup(sent)
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
+            elif found_type == "online":
+                recent = await self._get_filtered_users(chat_id, source="profile", hours=24)
+                if not recent:
+                    sent = await message.answer("ℹ️ Немає онлайн за 24г.")
+                    await self.auto_cleanup(sent)
+                    return
+                await self._send_pings(message.chat.id, recent, call_text, use_emoji=False)
             else:
                 await self._send_pings(message.chat.id, users, call_text, use_emoji=False)

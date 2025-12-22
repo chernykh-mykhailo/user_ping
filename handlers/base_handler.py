@@ -38,7 +38,7 @@ class BaseHandler(ABC):
         """Повертає роутер з зареєстрованими хендлерами"""
         return self.router
         
-    async def auto_cleanup(self, message: Message, bot_message: Message = None):
+    async def auto_cleanup(self, message: Message, bot_message: Message = None, custom_delay: int = None):
         """
         Автоматично видаляє повідомлення користувача та бота через заданий час
         Спільно для всіх хендлерів
@@ -46,9 +46,13 @@ class BaseHandler(ABC):
         import asyncio
         from utils.helpers import get_clean_chat_id
         
-        chat_id = get_clean_chat_id(message.chat.id)
-        # Отримуємо налаштування (за замовчуванням 0 - вимкнено)
-        delay = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
+        # Визначаємо затримку
+        if custom_delay is not None:
+            delay = custom_delay
+        else:
+            chat_id = get_clean_chat_id(message.chat.id)
+            # Отримуємо налаштування (за замовчуванням 0 - вимкнено)
+            delay = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
         
         if delay > 0:
             await asyncio.sleep(delay)

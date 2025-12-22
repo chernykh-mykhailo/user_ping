@@ -3,7 +3,8 @@ Userbot collector - збір даних через Telethon (SRP)
 """
 import logging
 import asyncio
-from telethon import TelegramClient, events as t_events
+from datetime import datetime
+from telethon import TelegramClient, events as t_events, types
 from core.database import ChatRepository
 from utils.helpers import get_clean_chat_id
 
@@ -59,8 +60,8 @@ class UserbotCollector:
         if sender and hasattr(sender, 'id') and not getattr(sender, 'bot', False):
             user_id = str(sender.id)
             name = getattr(sender, 'first_name', "Учасник") or "Учасник"
-            # Оновлюємо activity
-            self.chat_repo.save_user(chat_id, user_id, name)
+            # Оновлюємо activity (source=message за замовчуванням)
+            self.chat_repo.save_user(chat_id, user_id, name, source="message")
     
     async def sync_participants(self, chat_id: int) -> int:
         """
@@ -76,11 +77,48 @@ class UserbotCollector:
             if not user.bot:
                 user_id = str(user.id)
                 name = user.first_name or "Учасник"
-                # При синхронізації НІКОЛИ не знімаємо анрег
-                self.chat_repo.save_user(clean_chat_id, user_id, name, update_unreg=False)
+                
+                # Витягуємо статус із профілю (v1.8.5)
+                profile_time = self._parse_user_status(user)
+                
+                # При синхронізації НІКОЛИ не знімаємо анрег і вказуємо source="profile"
+                self.chat_repo.save_user(
+                    clean_chat_id, 
+                    user_id, 
+                    name, 
+                    update_unreg=False, 
+                    source="profile",
+                    profile_time=profile_time
+                )
                 count += 1
         
         return count
+
+    def _parse_user_status(self, user) -> str:
+        """Перетворює статус Telethon у ISO рядок часу (v1.8.6: з офсетами)"""
+        status = user.status
+        if not status:
+            return None
+            
+        now = datetime.now()
+        if isinstance(status, types.UserStatusOnline):
+            return now.isoformat()
+        elif isinstance(status, types.UserStatusOffline):
+            return status.was_online.isoformat()
+        elif isinstance(status, types.UserStatusRecently):
+            # Був нещодавно (до 3 днів) -> ставимо -2 години для сортування нижче онлайн юзерів
+            from datetime import timedelta
+            return (now - timedelta(hours=2)).isoformat()
+        elif isinstance(status, types.UserStatusLastWeek):
+            # До 7 днів -> ставимо -4 дні
+            from datetime import timedelta
+            return (now - timedelta(days=4)).isoformat()
+        elif isinstance(status, types.UserStatusLastMonth):
+            # До місяця -> ставимо -15 днів
+            from datetime import timedelta
+            return (now - timedelta(days=15)).isoformat()
+        
+        return None
     
     async def start(self):
         """
