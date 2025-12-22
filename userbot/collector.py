@@ -60,8 +60,15 @@ class UserbotCollector:
         if sender and hasattr(sender, 'id') and not getattr(sender, 'bot', False):
             user_id = str(sender.id)
             name = getattr(sender, 'first_name', "Учасник") or "Учасник"
-            # Оновлюємо activity (source=message за замовчуванням)
-            self.chat_repo.save_user(chat_id, user_id, name, source="message")
+            
+            # v2.2.0: Ignore commands to prevent race conditions with unreg
+            text = event.text or ""
+            if text.startswith(('/', '!')):
+                # For commands, we only update the name/last_seen but DON'T remove unreg
+                self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=False)
+            else:
+                # For normal messages, update and clear temp unreg
+                self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=True)
     
     async def sync_participants(self, chat_id: int) -> int:
         """

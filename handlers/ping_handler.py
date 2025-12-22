@@ -453,11 +453,11 @@ class PingHandler(BaseHandler):
         chat_data = self.chat_repo.get_chat_data(chat_id)
         all_users = chat_data.get("users", {})
         
-        temp_unreg = set(chat_data.get("temp_unreg", []))
-        super_unreg = set(chat_data.get("super_unreg", []))
+        temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
+        super_unreg = set(map(str, chat_data.get("super_unreg", [])))
         db_data = self.chat_repo.db.load()
-        global_unreg = set(db_data.get("global_unreg", {}).get("temp", []))
-        global_super = set(db_data.get("global_unreg", {}).get("super", []))
+        global_unreg = set(map(str, db_data.get("global_unreg", {}).get("temp", [])))
+        global_super = set(map(str, db_data.get("global_unreg", {}).get("super", [])))
         
         threshold = datetime.now() - timedelta(hours=hours)
         result = {}

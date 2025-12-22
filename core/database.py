@@ -120,6 +120,7 @@ class ChatRepository:
         Зберігає користувача. 
         source: 'message' (повідомлення в чаті) або 'profile' (статус в профілі)
         """
+        user_id = str(user_id)
         data = self.db.load()
         
         if chat_id not in data:
@@ -190,13 +191,13 @@ class ChatRepository:
         chat_data = self.get_chat_data(chat_id)
         
         all_users_raw = chat_data.get("users", {})
-        temp_unreg = set(chat_data.get("temp_unreg", []))
-        super_unreg = set(chat_data.get("super_unreg", []))
+        temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
+        super_unreg = set(map(str, chat_data.get("super_unreg", [])))
         
         # Перевіряємо глобальні анреги
         db_data = self.db.load()
-        global_unreg = set(db_data.get("global_unreg", {}).get("temp", []))
-        global_super = set(db_data.get("global_unreg", {}).get("super", []))
+        global_unreg = set(map(str, db_data.get("global_unreg", {}).get("temp", [])))
+        global_super = set(map(str, db_data.get("global_unreg", {}).get("super", [])))
         
         # Фільтруємо анреги
         active_list = []
@@ -222,6 +223,7 @@ class ChatRepository:
 
     def add_to_global_unreg(self, user_id: str, is_super: bool = False) -> None:
         """Додає користувача до глобального анрегу"""
+        user_id = str(user_id)
         data = self.db.load()
         if "global_unreg" not in data:
             data["global_unreg"] = {"temp": [], "super": []}
@@ -239,6 +241,7 @@ class ChatRepository:
 
     def remove_from_global_unreg(self, user_id: str) -> bool:
         """Видаляє користувача з усіх глобальних анрегів"""
+        user_id = str(user_id)
         data = self.db.load()
         if "global_unreg" not in data:
             return False
@@ -266,6 +269,7 @@ class ChatRepository:
     
     def add_to_temp_unreg(self, chat_id: str, user_id: str) -> bool:
         """Додає до тимчасового анрегу"""
+        user_id = str(user_id)
         data = self.db.load()
         
         # Ініціалізуємо чат, якщо не існує
@@ -287,6 +291,7 @@ class ChatRepository:
     
     def add_to_super_unreg(self, chat_id: str, user_id: str) -> bool:
         """Додає до постійного анрегу"""
+        user_id = str(user_id)
         data = self.db.load()
         
         # Ініціалізуємо чат, якщо не існує
@@ -308,6 +313,7 @@ class ChatRepository:
     
     def remove_from_unreg(self, chat_id: str, user_id: str) -> bool:
         """Видаляє з обох списків анрегу"""
+        user_id = str(user_id)
         data = self.db.load()
         
         # Ініціалізуємо чат, якщо не існує
