@@ -42,6 +42,9 @@ class AdminHandler(BaseHandler):
         self.router.message(Command("stats"))(self.cmd_stats)
         self.router.message(F.text.regexp(r'^!?стата', flags=0))(self.cmd_stats)
         
+        self.router.message(Command("fullstats"))(self.cmd_fullstats)
+        self.router.message(F.text.regexp(r'^!?фулстата', flags=0))(self.cmd_fullstats)
+        
         
         self.router.message(Command("admin_settings", "apanel"))(self.cmd_admin_settings)
         self.router.message(Command("ahelp", "admin_help"))(self.cmd_ahelp)
@@ -184,6 +187,65 @@ class AdminHandler(BaseHandler):
         sent = await self._safe_answer(message, stats_text, parse_mode="HTML")
         await self.auto_cleanup(message, sent)
         self.logger.info(f"Відправлено статистику: {stats['total']} осіб")
+
+    async def cmd_fullstats(self, message: Message):
+        """Показує детальну статистику чату з іменами unreg юзерів"""
+        self.logger.info(f"Отримано команду FULLSTATS від {message.from_user.id}")
+        
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        chat_data = self.chat_repo.get_chat_data(chat_id)
+        
+        # Get users dict
+        users = chat_data.get("users", {})
+        temp_unreg = chat_data.get("temp_unreg", [])
+        super_unreg = chat_data.get("super_unreg", [])
+        
+        # Get global unreg
+        data = self.chat_repo.storage.load()
+        global_temp = data.get("global_unreg", {}).get("temp", [])
+        global_super = data.get("global_unreg", {}).get("super", [])
+        
+        # Helper to get name
+        def get_name(uid):
+            uid = str(uid)
+            if uid in users:
+                u = users[uid]
+                if isinstance(u, dict):
+                    return u.get("name", uid)
+                return u
+            return f"ID:{uid}"
+        
+        # Build lists
+        temp_list = [f"• {get_name(uid)}" for uid in temp_unreg[:15]]
+        super_list = [f"• {get_name(uid)}" for uid in super_unreg[:15]]
+        global_temp_list = [f"• {get_name(uid)}" for uid in global_temp[:10]]
+        global_super_list = [f"• {get_name(uid)}" for uid in global_super[:10]]
+        
+        stats_text = f"📊 <b>FULL STATS</b> — чат {chat_id}\n\n"
+        
+        stats_text += f"👥 <b>Всього в базі:</b> {len(users)}\n\n"
+        
+        stats_text += f"🔕 <b>Temp Unreg ({len(temp_unreg)}):</b>\n"
+        stats_text += "\n".join(temp_list) if temp_list else "— немає"
+        if len(temp_unreg) > 15:
+            stats_text += f"\n... +{len(temp_unreg) - 15} ще"
+        
+        stats_text += f"\n\n🚫 <b>Super Unreg ({len(super_unreg)}):</b>\n"
+        stats_text += "\n".join(super_list) if super_list else "— немає"
+        if len(super_unreg) > 15:
+            stats_text += f"\n... +{len(super_unreg) - 15} ще"
+        
+        stats_text += f"\n\n🌐 <b>Global Temp ({len(global_temp)}):</b>\n"
+        stats_text += "\n".join(global_temp_list) if global_temp_list else "— немає"
+        
+        stats_text += f"\n\n🌐 <b>Global Super ({len(global_super)}):</b>\n"
+        stats_text += "\n".join(global_super_list) if global_super_list else "— немає"
+        
+        sent = await self._safe_answer(message, stats_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent, custom_delay=60)
 
     async def cmd_admin_settings(self, message: Message):
         """Встановлює глобальні налаштування (адміни бота)"""
