@@ -471,8 +471,12 @@ class PingHandler(BaseHandler):
             ls_str = val.get("last_seen", "2000-01-01T00:00:00")
             ps_str = val.get("profile_seen", "2000-01-01T00:00:00")
             
-            ls = datetime.fromisoformat(ls_str)
-            ps = datetime.fromisoformat(ps_str)
+            # v2.3.0: Handle mixed timezone-aware and naive datetimes
+            try:
+                ls = datetime.fromisoformat(ls_str.replace('+00:00', '').replace('Z', ''))
+                ps = datetime.fromisoformat(ps_str.replace('+00:00', '').replace('Z', ''))
+            except:
+                continue  # Skip invalid dates
             
             match_found = False
             if source == "message" and ls > threshold:
