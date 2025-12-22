@@ -109,6 +109,7 @@ class ChatRepository:
                 "super_unreg": []
             }
             self.db.save(data)
+        return data.get(chat_id)
     def get_all_chats(self) -> List[str]:
         """Повертає список ID всіх чатів у базі"""
         data = self.db.load()
