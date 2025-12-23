@@ -73,6 +73,10 @@ class AdminHandler(BaseHandler):
         self.router.message(LoginStates.waiting_for_phone)(self.process_auth_phone)
         self.router.message(LoginStates.waiting_for_code)(self.process_auth_code)
         self.router.message(LoginStates.waiting_for_password)(self.process_auth_password)
+        
+        # Chat-wide unreg and premium (v2.5.0)
+        self.router.message(Command("chat_unreg"))(self.cmd_chat_unreg)
+        self.router.message(Command("admin_grant_chat_premium"))(self.cmd_admin_grant_chat_premium)
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
         cid = get_clean_chat_id(chat_id)
@@ -735,3 +739,63 @@ class AdminHandler(BaseHandler):
                 await message.answer("✅ Видалено з реклами.")
             else: await message.answer("❌ Не знайдено.")
         except: await message.answer("❌ Error")
+
+    # === Chat-Wide Features (v2.5.0) ===
+    
+    async def cmd_chat_unreg(self, message: Message):
+        """Анрегає всіх користувачів в чаті (Owner only)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
+            return await message.answer("❌ Тільки для власників бота.")
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        chat_data = self.chat_repo.get_chat_data(chat_id)
+        users = chat_data.get("users", {})
+        
+        if not users:
+            return await message.answer("ℹ️ В базі немає користувачів цього чату.")
+        
+        # Add all users to super_unreg
+        count = 0
+        for user_id in users.keys():
+            if self.chat_repo.add_to_super_unreg(chat_id, user_id):
+                count += 1
+        
+        await message.answer(
+            f"✅ <b>Chat Unreg Complete</b>\n\n"
+            f"🚫 Анрегнуто: {count} користувачів\n"
+            f"<i>Всі тепер в super_unreg списку цього чату.</i>",
+            parse_mode="HTML"
+        )
+
+    async def cmd_admin_grant_chat_premium(self, message: Message):
+        """Видає Chat Premium безкоштовно (Owner only)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
+            return await message.answer("❌ Тільки для власників бота.")
+        
+        args = message.text.split()
+        if len(args) < 3:
+            return await message.answer("Usage: /admin_grant_chat_premium chat_id days")
+        
+        try:
+            target_chat_id = args[1]
+            days = int(args[2])
+            
+            # Import ChatPremiumRepository if not available
+            from core import ChatPremiumRepository
+            from core.database import JSONDatabase
+            from config import DB_FILE
+            
+            db = JSONDatabase(DB_FILE)
+            chat_premium_repo = ChatPremiumRepository(db)
+            chat_premium_repo.grant_chat_premium(target_chat_id, days)
+            
+            await message.answer(
+                f"✅ <b>Chat Premium видано!</b>\n\n"
+                f"💬 Чат: <code>{target_chat_id}</code>\n"
+                f"📅 Термін: {days} днів\n\n"
+                f"<i>Тепер всі в цьому чаті можуть /superunreg</i>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await message.answer(f"❌ Помилка: {e}")
+

@@ -319,33 +319,39 @@ class UserHandler(BaseHandler):
                 is_admin = self.chat_repo.is_bot_admin(callback.from_user.id)
                 
                 text = (
-                    "<b>⚙️ Керування чатом</b>\n\n"
-                    "• <code>/settings</code> — Головні налаштування чату\n"
-                    "• <code>!стата</code> або /stats — Детальна статистика\n"
-                    "• <code>!збір</code> або /sync — Оновити базу учасників\n"
-                    "• <code>!адміни</code> — Пінганути всіх адмінів чату\n"
+                    "<b>⚙️ Керування</b>\n\n"
+                    "<b>Адмін-панель:</b>\n"
+                    "• /settings — Головне меню налаштувань\n\n"
+                    "<b>Базові команди:</b>\n"
+                    "• <code>!збір</code> або /sync — Оновити базу користувачів\n"
+                    "• <code>!стата</code> або /stats — Статистика чату\n"
+                    "• <code>!адміни</code> — Пінганути всіх адмінів\n"
                 )
                 
                 if is_admin or is_owner or is_super:
                     text += (
-                        "\n👨‍💻 <b>Bot Staff Panel:</b>\n"
+                        "\n<b>👑 Адмін-команди (Owner Only):</b>\n"
+                        "• /apanel — Глобальні налаштування\n"
+                        "• /ub_login — Авторизація юзербота\n"
+                        "• /admin_toggle_userbot — ВКЛ/ВИКЛ юзербот\n"
                         "• /admin_list — Весь склад персоналу\n"
-                        "• /admin_help — Керування Premium (для Адмінів)\n"
                     )
                     
                 if is_owner or is_super:
                     text += (
-                        "\n👑 <b>Owner Features:</b>\n"
-                        "• /apanel — Глобальна панель бота\n"
-                        "• /ub_login — Керування Юзерботом\n"
-                        "• /mod_add [ID] — Додати модератора\n"
+                        "\n<b>💎 Premium команди:</b>\n"
+                        "• /admin_grant_premium user_id days\n"
+                        "• /admin_revoke_premium user_id\n"
+                        "• /admin_grant_chat_premium chat_id days\n"
+                        "• /chat_unreg — Анрег всього чату\n"
                     )
                     
                 if is_super:
                     text += (
-                        "\n⭐️ <b>SuperOwner Only:</b>\n"
+                        "\n<b>⭐️ SuperOwner Only:</b>\n"
                         "• /owner_add [ID] — Додати співвласника\n"
                         "• /owner_del [ID] — Видалити власника\n"
+                        "• /mod_add [ID] — Додати модератора\n"
                     )
                 
                 # Додаємо кнопку налаштувань прямо сюди для зручності
@@ -443,21 +449,30 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
     
     async def cmd_superunreg(self, message: Message):
-        """Постійно вимикає пінги (тільки з Premium)"""
+        """Постійно вимикає пінги (Premium або Chat Premium)"""
         user_id = str(message.from_user.id)
         chat_id = get_clean_chat_id(message.chat.id)
         self.logger.info(f"Команда SUPERUNREG від {user_id} у чаті {chat_id}")
         
-        # Перевірка преміуму
-        if not self.premium_repo.has_premium(user_id):
+        # Перевірка: Personal Premium АБО Chat Premium
+        has_personal = self.premium_repo.has_premium(user_id)
+        
+        # Check Chat Premium
+        from core import ChatPremiumRepository
+        from core.database import JSONDatabase
+        from config import DB_FILE
+        db = JSONDatabase(DB_FILE)
+        chat_premium_repo = ChatPremiumRepository(db)
+        has_chat_premium = chat_premium_repo.has_chat_premium(chat_id)
+        
+        if not has_personal and not has_chat_premium:
             sent = await message.answer(
                 "👑 <b>PREMIUM REQUIRED</b>\n\n"
-                "Функція <b>SuperUnreg</b> дозволяє назавжди зникнути з радарів пінгу в цьому чаті.\n\n"
-                "✨ <b>Переваги Premium:</b>\n"
-                "• Повний ігнор будь-яких викликів\n"
-                "• Пріоритет в обробці команд\n"
-                "• Підтримка розвитку проекту\n\n"
-                "💎 Придбати: /premium",
+                "Функція <b>SuperUnreg</b> дозволяє назавжди зникнути з радарів пінгу.\n\n"
+                "✨ <b>Як отримати:</b>\n"
+                "• Personal Premium: /premium\n"
+                "• Chat Premium: попросіть адміна чату\n\n"
+                "<i>Chat Premium дозволяє SuperUnreg для всіх в чаті!</i>",
                 parse_mode="HTML"
             )
             await self.auto_cleanup(message, sent, custom_delay=30)

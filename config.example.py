@@ -52,10 +52,10 @@ PREMIUM_PLANS = {
     "year": PremiumPlan("Personal Premium (Рік)", 200, 365)
 }
 
-# Chat Premium (v1.5.0)
+# Chat Premium (v2.5.0) - reduced price to encourage adoption
 CHAT_PREMIUM_PLANS = {
-    "month": PremiumPlan("Chat Premium (Місяць)", 1500, 30),
-    "year": PremiumPlan("Chat Premium (Рік)", 15000, 365)
+    "month": PremiumPlan("Chat Premium (Місяць)", 500, 30),
+    "year": PremiumPlan("Chat Premium (Рік)", 5000, 365)
 }
 
 # Gift Premium (v1.5.0) - зі знижкою 20%!
