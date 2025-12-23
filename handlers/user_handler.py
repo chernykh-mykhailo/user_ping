@@ -5,7 +5,7 @@ import logging
 import asyncio
 from aiogram import F
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ChatMemberUpdated
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from config import (
