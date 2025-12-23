@@ -168,6 +168,7 @@ class PingBot:
             BotCommand(command="anybody", description="🎲 Випадковий юзер"),
             BotCommand(command="unreg", description="🔇 Вимкнути пінг (тимчасово)"),
             BotCommand(command="superunreg", description="🚫 Вимкнути пінг (Premium)"),
+            BotCommand(command="spanreg", description="🚫 SuperUnreg (alias)"),
             BotCommand(command="reg", description="🔔 Увімкнути пінг"),
             BotCommand(command="gunreg", description="🌍 Глобальний анрег (всі чати)"),
             BotCommand(command="gsuperunreg", description="👑 Глобальний SuperUnreg"),

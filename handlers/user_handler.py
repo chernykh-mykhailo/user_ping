@@ -60,7 +60,9 @@ class UserHandler(BaseHandler):
         self.router.message(F.text.regexp(r'^\s*!?грег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_reg)
         
         # Premium
+        # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
+        self.router.message(Command("spanreg"))(self.cmd_superunreg)
     
     async def cmd_start(self, message: Message):
         """Обробляє /start з реферальними посиланнями"""
@@ -146,9 +148,10 @@ class UserHandler(BaseHandler):
             "🎮 <b>Панель ролей</b> — Самореєстрація\n"
             "📝 <b>Шаблони</b> — Збережені тексти\n"
             "⚙️ <b>Керування</b> — Адмін-команди\n"
-            "👑 <b>Premium</b> — Преміум функції\n\n"
+            "👑 <b>Premium</b> — Преміум функції (вкл. Захист від тегів)\n\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "💬 Зв'язок: /feedback\n"
+            "🛡 Alias: /spanreg = /superunreg\n"
             f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>"
         )
         
