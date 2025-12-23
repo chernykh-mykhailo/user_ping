@@ -145,10 +145,13 @@ class AdminHandler(BaseHandler):
                 except Exception as ub_err:
                     self.logger.error(f"Userbot sync error: {ub_err}")
                     await status.edit_text(
-                        f"⚠️ <b>Часткова синхронізація</b>\n\n"
-                        f"👑 Адміни оновлені: {admin_count}\n"
-                        f"❌ Юзербот не зміг зібрати всіх: <code>{str(ub_err)[:50]}...</code>\n\n"
-                        "<i>Спробуйте !APANEL щоб перевірити статус юзербота.</i>",
+                        f"✅ <b>Синхронізація (Admin Rights): OK</b>\n"
+                        f"👥 Знайдено адмінів: {admin_count}\n\n"
+                        f"⚠️ <b>Повний збір пропущено</b>\n"
+                        f"Щоб зібрати всіх учасників чату, нам потрібна допомога адміністратора.\n\n"
+                        f"👉 <b>Рішення:</b>\n"
+                        f"Додайте в чат: @you_can_try_this\n"
+                        f"I повторіть /sync",
                         parse_mode="HTML"
                     )
             else:

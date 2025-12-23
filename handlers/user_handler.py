@@ -38,6 +38,12 @@ class UserHandler(BaseHandler):
         # Contact
         self.router.message(Command("feedback", "contact"))(self.cmd_feedback)
         
+        # New Chat Notification (v2.4.2)
+        from aiogram.filters import ChatMemberUpdatedFilter, MEMBER, ADMINISTRATOR
+        self.router.my_chat_member(
+            ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
+        )(self.on_bot_join)
+        
         # Unreg/Reg - case-insensitive for Ukrainian commands (Анрег = анрег)
         import re
         self.router.message(Command("unreg"))(self.cmd_unreg)
@@ -512,6 +518,35 @@ class UserHandler(BaseHandler):
         sent = await message.answer(balance_text, parse_mode="HTML")
         await self.auto_cleanup(message, sent)
 
+    async def cmd_start(self, message: Message):
+        """Обробляє команду /start"""
+        # Перевіряємо чи це реферальне посилання
+        args = message.text.split()
+        if len(args) > 1:
+            referrer_id = args[1]
+            # Якщо це не ми самі (захист від накрутки)
+            if referrer_id != str(message.from_user.id):
+                await self._handle_referral(message, referrer_id, str(message.from_user.id))
+                return
+
+        start_text = (
+            "👋 <b>Вітаю! Ping Bot готовий до роботи!</b>\n\n"
+            "📋 <b>Швидкий старт:</b>\n"
+            "1️⃣ Зробіть мене <b>адміністратором</b> (для доступу до повідомлень)\n"
+            "2️⃣ Виконайте /sync для синхронізації учасників\n"
+            "3️⃣ Готово! Тепер можна використовувати /all, /anybody та інші команди\n\n"
+            "💡 <i>Синхронізація відбувається автоматично щоночі о 03:00.</i>\n\n"
+            "❓ <b>Важливо про синхронізацію:</b>\n"
+            "Щоб бот міг бачити <b>всіх</b> учасників (а не тільки тих, хто пише), "
+            "потрібно додати нашого технічного адміністратора:\n"
+            "👉 @you_can_try_this\n\n"
+            "<i>Він допоможе зібрати повну базу користувачів для коректної роботи команд. "
+            "Бот ніколи не турбуватиме вас без команди.</i>\n\n"
+            "Всі команди: /help"
+        )
+        sent = await message.answer(start_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent, custom_delay=60)
+
     # === Global Unreg Logic ===
 
     async def cmd_global_unreg(self, message: Message):
@@ -566,5 +601,40 @@ class UserHandler(BaseHandler):
             )
         else:
             sent = await message.answer("ℹ️ Ви і так отримували глобальні пінги.")
-            
+        
         await self.auto_cleanup(message, sent)
+
+    async def on_bot_join(self, event: ChatMemberUpdated):
+        """
+        Відстежує додавання бота в нові чати (v2.4.2)
+        Повідомляє власника про нову групу для перевірки юзербота.
+        """
+        # Перевіряємо чи це саме додавання (був left/kicked -> став member/admin)
+        if event.old_chat_member.status in ["left", "kicked", "restricted"] and \
+           event.new_chat_member.status in ["member", "administrator"]:
+            
+            chat_title = event.chat.title or "Chat"
+            chat_id = event.chat.id
+            username = event.chat.username or "private"
+            
+            added_by = event.from_user.first_name
+            added_by_username = f"@{event.from_user.username}" if event.from_user.username else str(event.from_user.id)
+            
+            # Логуємо
+            self.logger.info(f"🆕 Бот доданий в чат: {chat_title} ({chat_id}) користувачем {added_by}")
+            
+            # Повідомляємо власника
+            try:
+                msg_text = (
+                    f"🆕 <b>Бот додано в новий чат!</b>\n\n"
+                    f"📝 Назва: {chat_title}\n"
+                    f"🆔 ID: <code>{chat_id}</code>\n"
+                    f"🔗 Link: @{username}\n"
+                    f"👤 Ким: {added_by} ({added_by_username})\n\n"
+                    f"⚠️ <b>Action Required:</b>\n"
+                    f"Перевірте чи є там Support Admin (@you_can_try_this)\n"
+                    f"Якщо ні - напишіть власнику чату."
+                )
+                await self.bot.send_message(ADMIN_USER_ID, msg_text, parse_mode="HTML")
+            except Exception as e:
+                self.logger.error(f"Failed to notify owner about new chat: {e}")
