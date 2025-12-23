@@ -7,6 +7,8 @@ from datetime import datetime
 from telethon import TelegramClient, events as t_events, types
 from core.database import ChatRepository
 from utils.helpers import get_clean_chat_id
+import os
+from .session_manager import SmartSessionManager
 
 
 class UserbotCollector:
@@ -22,14 +24,20 @@ class UserbotCollector:
         session_name: str,
         chat_repo: ChatRepository
     ):
-        self.session_name = session_name
-        self.client = TelegramClient(session_name, api_id, api_hash)
+        self.api_id = api_id
+        self.api_hash = api_hash
         self.chat_repo = chat_repo
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"📁 Userbot session: {session_name}.session")
         
-        # Реєструємо обробники
-        self._register_handlers()
+        # v2.4.0: Smart Session Management
+        base_name = os.path.basename(session_name)
+        sessions_dir = os.path.dirname(session_name) or "sessions"
+        self.session_manager = SmartSessionManager(sessions_dir, base_name)
+        
+        # Тимчасовий клієнт (буде перевизначено в start)
+        self.client = None
+        
+        # Реєструємо обробники будуть викликані після створення клієнта
     
     def _register_handlers(self):
         """Реєструє обробники подій"""
@@ -131,20 +139,39 @@ class UserbotCollector:
     
     async def start(self):
         """
-        Запускає userbot (Headless режим)
+        Запускає userbot з підтримкою автоматичного вибору сесії
         """
         try:
-            if not self.client.is_connected():
-                await self.client.connect()
+            # Отримуємо найкращу існуючу сесію
+            current_session = self.session_manager.get_best_session()
+            self.logger.info(f"🔄 Спроба запуску з сесією: {current_session}")
+            
+            self.client = TelegramClient(current_session, self.api_id, self.api_hash)
+            self._register_handlers()
+            
+            await self.client.connect()
             
             if not await self.client.is_user_authorized():
-                self.logger.warning("Userbot НЕ авторизований!")
+                self.logger.warning(f"⚠️ Сесія {current_session} не авторизована!")
+                # Якщо це була існуюча сесія, але вона не ок - можливо вона бита
+                if os.path.exists(f"{current_session}.session"):
+                    self.session_manager.mark_broken(current_session)
                 return False
                 
-            self.logger.info("Userbot успішно підключено та авторизовано")
+            self.logger.info(f"✅ Userbot успішно підключено (Сесія: {current_session})")
+            # Чистимо старе сміття
+            self.session_manager.cleanup_old_broken()
             return True
+            
         except Exception as e:
-            self.logger.error(f"Помилка підключення Userbot: {e}")
+            error_msg = str(e)
+            self.logger.error(f"❌ Помилка старту Userbot: {e}")
+            
+            # Якщо сесія бита (наприклад, IP changed)
+            if "authorization" in error_msg.lower() or "key" in error_msg.lower():
+                 if self.client and hasattr(self.client, 'session'):
+                     self.session_manager.mark_broken(self.client.session.filename)
+            
             return False
 
     # === Login Methods (v1.7.0) ===
@@ -189,7 +216,16 @@ class UserbotCollector:
     async def switch_account(self, api_id: int, api_hash: str, session_name: str):
         """Перемикає акаунт юзербота (v1.7.0)"""
         await self.stop()
-        self.client = TelegramClient(session_name, api_id, api_hash)
-        self._register_handlers()
-        self.logger.info(f"Юзербот перемкнуто на сесію: {session_name}")
+        
+        # Оновлюємо облікові дані та менеджер сесій
+        self.api_id = api_id
+        self.api_hash = api_hash
+        
+        base_name = os.path.basename(session_name)
+        sessions_dir = os.path.dirname(session_name) or "sessions"
+        self.session_manager = SmartSessionManager(sessions_dir, base_name)
+        
+        self.logger.info(f"🔄 Перемикання на акаунт з базовою назвою: {base_name}")
+        
+        # start() сам створить новий клієнт і знайде найкращу сесію
         return await self.start()
