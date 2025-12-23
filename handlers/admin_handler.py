@@ -76,7 +76,9 @@ class AdminHandler(BaseHandler):
         
         # Chat-wide unreg and premium (v2.5.0)
         self.router.message(Command("chat_unreg"))(self.cmd_chat_unreg)
+        self.router.message(Command("chat_superunreg"))(self.cmd_chat_superunreg)
         self.router.message(Command("admin_grant_chat_premium"))(self.cmd_admin_grant_chat_premium)
+
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
         cid = get_clean_chat_id(chat_id)
@@ -159,11 +161,15 @@ class AdminHandler(BaseHandler):
                         parse_mode="HTML"
                     )
             else:
+                # Get total users in chat
+                chat_data = self.chat_repo.get_chat_data(chat_id)
+                total_users = len(chat_data.get("users", {}))
+                
                 await status.edit_text(
                     f"✅ <b>Синхронізація завершена!</b>\n\n"
-                    f"👑 Оновлено адмінів: {admin_count}\n"
-                    f"ℹ️ Повний збір пропущено (Юзербот вимкнено).\n\n"
-                    f"<i>Щоб зібрати всіх учасників, увімкніть юзербота в /apanel</i>",
+                    f"👥 Всього в базі чату: {total_users}\n"
+                    f"👑 Оновлено адмінів: {admin_count}\n\n"
+                    f"<i>Для повного збору додайте нашого Support Admin: @you_can_try_this</i>",
                     parse_mode="HTML"
                 )
                 
@@ -743,7 +749,32 @@ class AdminHandler(BaseHandler):
     # === Chat-Wide Features (v2.5.0) ===
     
     async def cmd_chat_unreg(self, message: Message):
-        """Анрегає всіх користувачів в чаті (Owner only)"""
+        """Тимчасово анрегає всіх користувачів в чаті (Owner only)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
+            return await message.answer("❌ Тільки для власників бота.")
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        chat_data = self.chat_repo.get_chat_data(chat_id)
+        users = chat_data.get("users", {})
+        
+        if not users:
+            return await message.answer("ℹ️ В базі немає користувачів цього чату.")
+        
+        # Add all users to temp_unreg
+        count = 0
+        for user_id in users.keys():
+            if self.chat_repo.add_to_temp_unreg(chat_id, user_id):
+                count += 1
+        
+        await message.answer(
+            f"✅ <b>Chat Temp Unreg Complete</b>\n\n"
+            f"🔕 Анрегнуто: {count} користувачів\n"
+            f"<i>Всі тепер в temp_unreg (автовідновлення при активності).</i>",
+            parse_mode="HTML"
+        )
+
+    async def cmd_chat_superunreg(self, message: Message):
+        """Постійно анрегає всіх користувачів в чаті (Owner only)"""
         if not self.chat_repo.is_owner(message.from_user.id):
             return await message.answer("❌ Тільки для власників бота.")
         
@@ -761,9 +792,9 @@ class AdminHandler(BaseHandler):
                 count += 1
         
         await message.answer(
-            f"✅ <b>Chat Unreg Complete</b>\n\n"
+            f"✅ <b>Chat Super Unreg Complete</b>\n\n"
             f"🚫 Анрегнуто: {count} користувачів\n"
-            f"<i>Всі тепер в super_unreg списку цього чату.</i>",
+            f"<i>Всі тепер в super_unreg (постійний захист).</i>",
             parse_mode="HTML"
         )
 
