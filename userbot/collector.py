@@ -4,6 +4,7 @@ Userbot collector - збір даних через Telethon (SRP)
 import logging
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from telethon import TelegramClient, events as t_events, types
 from core.database import ChatRepository
 from utils.helpers import get_clean_chat_id
@@ -141,10 +142,12 @@ class UserbotCollector:
         """
         Запускає userbot з підтримкою автоматичного вибору сесії
         """
+        current_session = self.session_manager.get_best_session()
         try:
-            # Отримуємо найкращу існуючу сесію
-            current_session = self.session_manager.get_best_session()
             self.logger.info(f"🔄 Спроба запуску з сесією: {current_session}")
+            
+            # v2.5.1: Примусова перевірка папки (профілактика readonly)
+            self.session_manager.sessions_dir.mkdir(parents=True, exist_ok=True)
             
             self.client = TelegramClient(current_session, self.api_id, self.api_hash)
             self._register_handlers()
@@ -154,7 +157,8 @@ class UserbotCollector:
             if not await self.client.is_user_authorized():
                 self.logger.warning(f"⚠️ Сесія {current_session} не авторизована!")
                 # Якщо це була існуюча сесія, але вона не ок - можливо вона бита
-                if os.path.exists(f"{current_session}.session"):
+                session_file = Path(f"{current_session}.session")
+                if session_file.exists():
                     self.session_manager.mark_broken(current_session)
                 return False
                 
@@ -164,13 +168,25 @@ class UserbotCollector:
             return True
             
         except Exception as e:
-            error_msg = str(e)
+            error_msg = str(e).lower()
             self.logger.error(f"❌ Помилка старту Userbot: {e}")
             
+            # v2.5.2: Специфічна обробка 'readonly database' (Oracle/Docker fix)
+            if "readonly" in error_msg or "database is locked" in error_msg:
+                self.logger.warning("💉 Спроба лікування 'readonly database' через видалення WAL/SHM файлів...")
+                try:
+                    for ext in [".session-wal", ".session-shm", ".session-journal"]:
+                        f = Path(f"{current_session}{ext}")
+                        if f.exists():
+                            f.unlink()
+                            self.logger.info(f"🗑 Видалено проблемний файл {f}")
+                except Exception as fix_err:
+                    self.logger.error(f"Не вдалося виконати очистку: {fix_err}")
+
             # Якщо сесія бита (наприклад, IP changed)
-            if "authorization" in error_msg.lower() or "key" in error_msg.lower():
+            if "authorization" in error_msg or "key" in error_msg:
                  if self.client and hasattr(self.client, 'session'):
-                     self.session_manager.mark_broken(self.client.session.filename)
+                     self.session_manager.mark_broken(current_session)
             
             return False
 
@@ -221,8 +237,10 @@ class UserbotCollector:
         self.api_id = api_id
         self.api_hash = api_hash
         
-        base_name = os.path.basename(session_name)
-        sessions_dir = os.path.dirname(session_name) or "sessions"
+        path_obj = Path(session_name)
+        base_name = path_obj.name
+        sessions_dir = path_obj.parent if path_obj.parent != Path('.') else Path("sessions")
+        
         self.session_manager = SmartSessionManager(sessions_dir, base_name)
         
         self.logger.info(f"🔄 Перемикання на акаунт з базовою назвою: {base_name}")

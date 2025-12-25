@@ -11,7 +11,9 @@ services:
       - ./users_data.json:/app/users_data.json
       - ./users_data_test.json:/app/users_data_test.json
       - ./backups:/app/backups
-      - ./sessions:/app/sessions # All session files persist here
+      - ./sessions:/app/sessions
+      - ./.env:/app/.env
+    # All session files persist here
     logging:
       driver: "json-file"
       options:
