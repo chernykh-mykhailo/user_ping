@@ -28,12 +28,12 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORD }}
+          key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT || 22 }}
           envs: ENV_FILE,DEPLOY_TARGET
           script: |
             set -e
-            PROJECT_PATH="${{ secrets.PROJECT_PATH || '/root/projects/mafia/user_ping' }}"
+            PROJECT_PATH="${{ secrets.PROJECT_PATH || '/home/ubuntu/user_ping' }}"
             
             echo "Target path: $PROJECT_PATH"
             echo "Deploying environment: $DEPLOY_TARGET"
