@@ -34,7 +34,21 @@ cp -r $PROJECT_DATA_DIR/* .
 
 # Гіт команди
 git add .
-git commit -m "Auto-backup: $(date +'%Y-%m-%d %H:%M:%S')"
-git push origin main
-
-echo "✅ Backup successfully pushed to GitHub!"
+# Перевіряємо, чи є зміни для коміту
+if git diff-index --quiet HEAD --; then
+    echo "🌕 No changes to backup."
+else
+    git commit -m "Auto-backup: $(date +'%Y-%m-%d %H:%M:%S')"
+    
+    # Визначаємо поточну гілку
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [ -z "$CURRENT_BRANCH" ]; then
+        # Якщо гілки ще немає (порожній репо), створюємо main
+        git checkout -b main
+        CURRENT_BRANCH="main"
+    fi
+    
+    echo "📤 Pushing to GitHub (branch: $CURRENT_BRANCH)..."
+    git push -u origin "$CURRENT_BRANCH"
+    echo "✅ Backup successfully pushed to GitHub!"
+fi
