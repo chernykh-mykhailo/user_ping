@@ -1,15 +1,17 @@
 """
 Userbot collector - збір даних через Telethon (SRP)
+v2.6.0: Використовує StringSession замість файлових сесій (fix readonly database)
 """
 import logging
 import asyncio
 from datetime import datetime
 from pathlib import Path
 from telethon import TelegramClient, events as t_events, types
+from telethon.sessions import StringSession
 from core.database import ChatRepository
 from utils.helpers import get_clean_chat_id
 import os
-from .session_manager import SmartSessionManager
+from .string_session_manager import StringSessionManager
 
 
 class UserbotCollector:
@@ -30,10 +32,9 @@ class UserbotCollector:
         self.chat_repo = chat_repo
         self.logger = logging.getLogger(__name__)
         
-        # v2.4.0: Smart Session Management
-        base_name = os.path.basename(session_name)
-        sessions_dir = os.path.dirname(session_name) or "sessions"
-        self.session_manager = SmartSessionManager(sessions_dir, base_name)
+        # v2.6.0: StringSession Manager (NO MORE SQLITE FILES!)
+        self.account_name = os.path.basename(session_name)
+        self.session_manager = StringSessionManager()
         
         # Тимчасовий клієнт (буде перевизначено в start)
         self.client = None
@@ -140,66 +141,47 @@ class UserbotCollector:
     
     async def start(self):
         """
-        Запускає userbot з підтримкою автоматичного вибору сесії
+        Запускає userbot з StringSession (без SQLite файлів)
         """
-        current_session = self.session_manager.get_best_session()
         try:
-            self.logger.info(f"🔄 Спроба запуску з сесією: {current_session}")
+            self.logger.info(f"🔄 Спроба запуску акаунта: {self.account_name}")
             
-            # v2.5.1: Примусова перевірка папки (профілактика readonly)
-            self.session_manager.sessions_dir.mkdir(parents=True, exist_ok=True)
+            # Отримуємо StringSession з JSON
+            session = self.session_manager.get_session(self.account_name)
             
-            self.client = TelegramClient(current_session, self.api_id, self.api_hash)
+            self.client = TelegramClient(session, self.api_id, self.api_hash)
             self._register_handlers()
             
             await self.client.connect()
             
             if not await self.client.is_user_authorized():
-                self.logger.warning(f"⚠️ Сесія {current_session} не авторизована!")
-                # Якщо це була існуюча сесія, але вона не ок - можливо вона бита
-                session_file = Path(f"{current_session}.session")
-                if session_file.exists():
-                    self.session_manager.mark_broken(current_session)
+                self.logger.warning(f"⚠️ Акаунт {self.account_name} не авторизований!")
                 return False
                 
-            self.logger.info(f"✅ Userbot успішно підключено (Сесія: {current_session})")
-            # Чистимо старе сміття
-            self.session_manager.cleanup_old_broken()
+            # Зберігаємо оновлену сесію після успішного підключення
+            self.session_manager.save_session(self.account_name, self.client.session)
+            
+            self.logger.info(f"✅ Userbot успішно підключено (Акаунт: {self.account_name})")
             return True
             
         except Exception as e:
-            error_msg = str(e).lower()
             self.logger.error(f"❌ Помилка старту Userbot: {e}")
-            
-            # v2.5.2: Специфічна обробка 'readonly database' (Oracle/Docker fix)
-            if "readonly" in error_msg or "database is locked" in error_msg:
-                self.logger.warning("💉 Спроба лікування 'readonly database' через видалення WAL/SHM файлів...")
-                try:
-                    for ext in [".session-wal", ".session-shm", ".session-journal"]:
-                        f = Path(f"{current_session}{ext}")
-                        if f.exists():
-                            f.unlink()
-                            self.logger.info(f"🗑 Видалено проблемний файл {f}")
-                except Exception as fix_err:
-                    self.logger.error(f"Не вдалося виконати очистку: {fix_err}")
-
-            # Якщо сесія бита (наприклад, IP changed)
-            if "authorization" in error_msg or "key" in error_msg:
-                 if self.client and hasattr(self.client, 'session'):
-                     self.session_manager.mark_broken(current_session)
-            
             return False
 
-    # === Login Methods (v1.7.0) ===
+    # === Login Methods (v2.6.0 - StringSession) ===
 
     async def request_phone_code(self, phone: str):
         """Запитує код підтвердження для входу"""
         try:
+            # Створюємо нову порожню StringSession для логіну
+            session = StringSession()
+            self.client = TelegramClient(session, self.api_id, self.api_hash)
+            
             if not self.client.is_connected():
                 await self.client.connect()
             return await self.client.send_code_request(phone)
         except Exception as e:
-            if self.client.is_connected():
+            if self.client and self.client.is_connected():
                 await self.client.disconnect()
             raise e
 
@@ -207,6 +189,11 @@ class UserbotCollector:
         """Вхід за кодом"""
         try:
             await self.client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+            
+            # Зберігаємо сесію після успішного входу
+            self.session_manager.save_session(self.account_name, self.client.session)
+            self.logger.info(f"💾 Сесію {self.account_name} збережено після входу")
+            
             return {"status": "success"}
         except Exception as e:
             if "Password" in str(e) or "SessionPasswordNeededError" in str(type(e)):
@@ -216,6 +203,11 @@ class UserbotCollector:
     async def sign_in_with_password(self, password: str):
         """Вхід за паролем (2FA)"""
         await self.client.sign_in(password=password)
+        
+        # Зберігаємо сесію після 2FA
+        self.session_manager.save_session(self.account_name, self.client.session)
+        self.logger.info(f"💾 Сесію {self.account_name} збережено після 2FA")
+        
         return {"status": "success"}
     
     async def stop(self):
@@ -230,20 +222,15 @@ class UserbotCollector:
             self.logger.error(f"Помилка при зупинці Userbot: {e}")
 
     async def switch_account(self, api_id: int, api_hash: str, session_name: str):
-        """Перемикає акаунт юзербота (v1.7.0)"""
+        """Перемикає акаунт юзербота (v2.6.0 - StringSession)"""
         await self.stop()
         
-        # Оновлюємо облікові дані та менеджер сесій
+        # Оновлюємо облікові дані
         self.api_id = api_id
         self.api_hash = api_hash
+        self.account_name = os.path.basename(session_name)
         
-        path_obj = Path(session_name)
-        base_name = path_obj.name
-        sessions_dir = path_obj.parent if path_obj.parent != Path('.') else Path("sessions")
+        self.logger.info(f"🔄 Перемикання на акаунт: {self.account_name}")
         
-        self.session_manager = SmartSessionManager(sessions_dir, base_name)
-        
-        self.logger.info(f"🔄 Перемикання на акаунт з базовою назвою: {base_name}")
-        
-        # start() сам створить новий клієнт і знайде найкращу сесію
+        # start() сам завантажить StringSession для цього акаунта
         return await self.start()
