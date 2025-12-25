@@ -71,7 +71,6 @@ CLEAN_HISTORY.md
 GIT_SETUP.md
 
 # Config with sensitive data (use config.example.py instead)
-config.py
 .env
 
 # Oracle Cloud Keys
