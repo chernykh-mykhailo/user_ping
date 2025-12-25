@@ -64,10 +64,13 @@ class PingBot:
         # Userbot (Dynamic state)
         self.use_userbot = self.chat_repo.get_global_setting("use_userbot", USE_USERBOT)
         
+        # v2.6.2: Робимо назву сесії персистентною (беремо з бази, якщо є)
+        active_session = self.chat_repo.get_global_setting("active_session_name", SESSION_NAME)
+        
         self.userbot = UserbotCollector(
             api_id=API_ID,
             api_hash=API_HASH,
-            session_name=SESSION_NAME,
+            session_name=active_session,
             chat_repo=self.chat_repo,
             session_storage=SESSION_STORAGE
         )

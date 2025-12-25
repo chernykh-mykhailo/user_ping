@@ -458,6 +458,8 @@ class AdminHandler(BaseHandler):
                 api_hash=acc_config['api_hash'],
                 session_name=acc_config['session']
             )
+            # Save active_session_name to database upon successful account switch
+            self.chat_repo.set_global_setting("active_session_name", acc_config['session'])
         except Exception as e:
             self.logger.error(f"Failed to switch account: {e}")
             await callback.message.edit_text(f"❌ <b>Помилка ініціалізації:</b>\n<code>{e}</code>", parse_mode="HTML")
@@ -557,6 +559,8 @@ class AdminHandler(BaseHandler):
                     parse_mode="HTML"
                 )
             else:
+                # Авторизація успішна без 2FA
+                self.chat_repo.set_global_setting("active_session_name", self.userbot.account_name)
                 await state.clear()
                 await status_msg.edit_text("🎉 <b>Успіх! Юзербот авторизований.</b>", parse_mode="HTML")
                 await self.userbot.start() # Перезавантажуємо клієнт
@@ -586,9 +590,16 @@ class AdminHandler(BaseHandler):
         
         try:
             await self.userbot.sign_in_with_password(password)
+            # Авторизація успішна
+            self.chat_repo.set_global_setting("active_session_name", self.userbot.account_name)
             await state.clear()
-            await self._safe_answer(message, "🎉 <b>Успіх! Юзербот авторизований через 2FA.</b>", parse_mode="HTML")
-            await self.userbot.start()
+            await message.answer(f"✅ <b>Вхід успішний!</b>\nЮзербот активований для акаунта: <code>{self.userbot.account_name}</code>", parse_mode="HTML")
+            await self.userbot.start() # Перезавантажуємо клієнт
+            # Assuming user_id is available in message.from_user.id and self.user_states is a dict
+            # If self.user_states is not used here, this line might need adjustment or removal based on context.
+            # For now, keeping it as provided in the snippet.
+            user_id = message.from_user.id 
+            # self.user_states.pop(user_id, None) # This line was commented out or removed in the original snippet, keeping it consistent.
             
         except Exception as e:
             self.logger.error(f"Error signing in with password: {e}")
