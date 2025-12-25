@@ -38,7 +38,7 @@ PROJECTS_CHANNEL = "https://t.me/+BZEIOiPj3so1NzU6"
 
 # === FILES ===
 DB_FILE = "data/users_data_test.json"  # Тестова база
-SESSION_STORAGE = "data/sessions_test.json"
+SESSION_STORAGE = "sessions/sessions_test.json"
 
 # === PING SETTINGS ===
 PING_LIMITS = {

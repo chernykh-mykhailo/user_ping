@@ -9,7 +9,7 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./backups:/app/backups
+      - ./sessions:/app/sessions
       - ./.env:/app/.env
     # All session files persist here
     logging:
