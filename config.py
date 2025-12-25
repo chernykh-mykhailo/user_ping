@@ -20,3 +20,7 @@ else:
 
 print(f"📱 Bot Token: {BOT_TOKEN[:20]}...")
 print(f"💾 Database: {DB_FILE}")
+try:
+    print(f"📂 Session Storage: {SESSION_STORAGE}")
+except NameError:
+    print("⚠️  SESSION_STORAGE NOT DEFINED IN CONFIG!")

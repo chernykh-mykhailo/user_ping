@@ -16,7 +16,8 @@ from datetime import datetime, timedelta
 # Конфігурація
 from config import (
     API_ID, API_HASH, SESSION_NAME,
-    BOT_TOKEN, DB_FILE, USE_USERBOT
+    BOT_TOKEN, DB_FILE, USE_USERBOT,
+    SESSION_STORAGE
 )
 
 # Core components
