@@ -15,7 +15,7 @@ class StringSessionManager:
     Це усуває всі проблеми з правами доступу до SQLite файлів у Docker.
     """
     
-    def __init__(self, storage_file: str = "sessions/sessions_storage.json"):
+    def __init__(self, storage_file: str = "data/sessions.json"):
         self.storage_file = Path(storage_file)
         self.logger = logging.getLogger(__name__)
         

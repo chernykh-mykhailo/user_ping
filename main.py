@@ -67,7 +67,8 @@ class PingBot:
             api_id=API_ID,
             api_hash=API_HASH,
             session_name=SESSION_NAME,
-            chat_repo=self.chat_repo
+            chat_repo=self.chat_repo,
+            session_storage=SESSION_STORAGE
         )
         
         # Handlers (кожен відповідає за свою частину)

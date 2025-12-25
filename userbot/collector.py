@@ -25,16 +25,17 @@ class UserbotCollector:
         api_id: int,
         api_hash: str,
         session_name: str,
-        chat_repo: ChatRepository
+        chat_repo: ChatRepository,
+        session_storage: str = "data/sessions.json"
     ):
         self.api_id = api_id
         self.api_hash = api_hash
         self.chat_repo = chat_repo
         self.logger = logging.getLogger(__name__)
         
-        # v2.6.0: StringSession Manager (NO MORE SQLITE FILES!)
+        # v2.6.0: StringSession Manager (Isolated storage)
         self.account_name = os.path.basename(session_name)
-        self.session_manager = StringSessionManager()
+        self.session_manager = StringSessionManager(session_storage)
         
         # Тимчасовий клієнт (буде перевизначено в start)
         self.client = None

@@ -50,6 +50,7 @@ users_data.json
 users_data_test.json
 *.json.backup
 backups/
+data
 
 # Environment variables
 .env

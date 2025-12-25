@@ -8,10 +8,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./users_data.json:/app/users_data.json
-      - ./users_data_test.json:/app/users_data_test.json
+      - ./data:/app/data
       - ./backups:/app/backups
-      - ./sessions:/app/sessions
       - ./.env:/app/.env
     # All session files persist here
     logging:

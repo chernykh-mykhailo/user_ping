@@ -8,9 +8,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./users_data_test.json:/app/users_data_test.json
+      - ./data:/app/data
       - ./backups:/app/backups
-      - ./sessions_test:/app/sessions
       - ./.env:/app/.env
     logging:
       driver: "json-file"
