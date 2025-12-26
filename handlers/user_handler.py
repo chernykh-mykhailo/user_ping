@@ -7,7 +7,7 @@ from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ChatMemberUpdated
 from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id
+from utils.helpers import get_clean_chat_id, get_user_name
 from config import (
     PREMIUM_PLANS, CHAT_PREMIUM_PLANS, FEEDBACK_BOT, 
     PROJECTS_CHANNEL, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM,
@@ -178,10 +178,27 @@ class UserHandler(BaseHandler):
         # Якщо це команда або тригер - ігноруємо (вони обробляються окремо і не знімають анрег)
         if text.startswith(('/', '!')):
             return
+        
+        # v2.6.3: Перевіряємо слова-команди без префіксів (анрег, рег, всі і т.д.)
+        word_commands = [
+            'анрег', 'рег', 'суперанрег', 'ганрег', 'гсуперанрег', 'грег',
+            'всі', 'хтось', 'стата', 'фулстата', 'стоп', 
+            'unreg', 'reg', 'superunreg', 'gunreg', 'gsuperunreg', 'greg',
+            'all', 'stats', 'fullstats', 'stop', 'help',
+            'адміни', 'admins', 'збір', 'sync', 'преміум', 'premium'
+        ]
+        first_word = text.strip().lower().split()[0] if text.strip() else ""
+        if first_word in word_commands:
+            return
             
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
-        name = message.from_user.first_name or "Учасник"
+        name = get_user_name(
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            username=message.from_user.username,
+            user_id=message.from_user.id
+        )
         
         # Оновлюємо ім'я та знімаємо тимчасовий анрег
         self.chat_repo.save_user(chat_id, user_id, name, update_unreg=True)

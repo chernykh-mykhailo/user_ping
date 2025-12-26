@@ -9,7 +9,7 @@ from pathlib import Path
 from telethon import TelegramClient, events as t_events, types
 from telethon.sessions import StringSession
 from core.database import ChatRepository
-from utils.helpers import get_clean_chat_id
+from utils.helpers import get_clean_chat_id, get_user_name
 import os
 from .string_session_manager import StringSessionManager
 
@@ -60,7 +60,13 @@ class UserbotCollector:
             user = await event.get_user()
             if user and not user.bot:
                 chat_id = get_clean_chat_id(event.chat_id)
-                self.chat_repo.save_user(chat_id, str(user.id), user.first_name or "Учасник")
+                name = get_user_name(
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    username=user.username,
+                    user_id=user.id
+                )
+                self.chat_repo.save_user(chat_id, str(user.id), name)
 
     async def _on_new_message(self, event):
         """Відстежує повідомлення для оновлення активності"""
@@ -72,7 +78,12 @@ class UserbotCollector:
         
         if sender and hasattr(sender, 'id') and not getattr(sender, 'bot', False):
             user_id = str(sender.id)
-            name = getattr(sender, 'first_name', "Учасник") or "Учасник"
+            name = get_user_name(
+                first_name=getattr(sender, 'first_name', None),
+                last_name=getattr(sender, 'last_name', None),
+                username=getattr(sender, 'username', None),
+                user_id=sender.id
+            )
             
             # v2.2.0: Ignore commands to prevent race conditions with unreg
             text = event.text or ""
@@ -96,7 +107,12 @@ class UserbotCollector:
         async for user in self.client.iter_participants(chat_id):
             if not user.bot:
                 user_id = str(user.id)
-                name = user.first_name or "Учасник"
+                name = get_user_name(
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    username=user.username,
+                    user_id=user.id
+                )
                 
                 # Витягуємо статус із профілю (v1.8.5)
                 profile_time = self._parse_user_status(user)

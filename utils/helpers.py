@@ -20,3 +20,18 @@ def get_clean_chat_id(chat_id: int) -> str:
         cid = cid.replace('-', '-100')
     
     return cid
+
+def get_user_name(first_name=None, last_name=None, username=None, user_id=None) -> str:
+    """
+    Повертає найкраще доступне ім'я користувача.
+    Пріоритет: First Name -> Last Name -> Username -> ID -> Користувач
+    """
+    if first_name and first_name.strip():
+        return first_name.strip()
+    if last_name and last_name.strip():
+        return last_name.strip()
+    if username and username.strip():
+        return username.strip()
+    if user_id:
+        return f"ID:{user_id}"
+    return "Користувач"

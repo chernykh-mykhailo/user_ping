@@ -5,7 +5,7 @@ import logging
 from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware, Bot
 from aiogram.types import TelegramObject, Message
-from utils.helpers import get_clean_chat_id
+from utils.helpers import get_clean_chat_id, get_user_name
 
 
 class ActivityMiddleware(BaseMiddleware):
@@ -47,7 +47,12 @@ class ActivityMiddleware(BaseMiddleware):
                     if first_word not in word_commands:
                         chat_id = get_clean_chat_id(event.chat.id)
                         user_id = str(event.from_user.id)
-                        name = event.from_user.first_name or "Учасник"
+                        name = get_user_name(
+                            first_name=event.from_user.first_name,
+                            last_name=event.from_user.last_name,
+                            username=event.from_user.username,
+                            user_id=event.from_user.id
+                        )
                         
                         # Перевіряємо чи був в temp_unreg
                         was_in_unreg = self.chat_repo.unreg.is_in_unreg(chat_id, user_id).get("temp", False)
