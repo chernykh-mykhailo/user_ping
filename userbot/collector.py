@@ -150,7 +150,15 @@ class UserbotCollector:
             # Отримуємо StringSession з JSON
             session = self.session_manager.get_session(self.account_name)
             
-            self.client = TelegramClient(session, self.api_id, self.api_hash)
+            # v2.6.4: Використовуємо реалістичні дані пристрою, щоб менше дратувати анти-флуд Телеграма
+            self.client = TelegramClient(
+                session, 
+                self.api_id, 
+                self.api_hash,
+                device_model="Android 13",
+                system_version="Pixel 7 Pro",
+                app_version="10.3.2"
+            )
             self._register_handlers()
             
             await self.client.connect()

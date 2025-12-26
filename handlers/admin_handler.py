@@ -453,26 +453,40 @@ class AdminHandler(BaseHandler):
         # Перемикаємо клієнт на льоту!
         await callback.message.edit_text(f"⏳ Перемикаюся на <b>{account_id}</b>...\n(API: {acc_config['api_id']})", parse_mode="HTML")
         try:
-            await self.userbot.switch_account(
+            success = await self.userbot.switch_account(
                 api_id=acc_config['api_id'],
                 api_hash=acc_config['api_hash'],
                 session_name=acc_config['session']
             )
-            # Save active_session_name to database upon successful account switch
-            self.chat_repo.set_global_setting("active_session_name", acc_config['session'])
+            
+            if success:
+                # v2.6.5: Якщо сесія завантажена і клієнт авторизований - фініш!
+                self.chat_repo.set_global_setting("active_session_name", acc_config['session'])
+                await callback.message.edit_text(
+                    f"✅ <b>Акаунт {account_id} вже авторизований!</b>\n"
+                    f"Юзербот успішно підключився за допомогою збереженої сесії.\n"
+                    f"Вводити номер телефону та код не потрібно. 🚀",
+                    parse_mode="HTML"
+                )
+                await state.clear()
+                return
+                
         except Exception as e:
             self.logger.error(f"Failed to switch account: {e}")
             await callback.message.edit_text(f"❌ <b>Помилка ініціалізації:</b>\n<code>{e}</code>", parse_mode="HTML")
+            await state.clear()
             return
-        
+
+        # Якщо сесії немає - просимо номер телефону
         await state.set_state(LoginStates.waiting_for_phone)
         await callback.message.edit_text(
             f"🛰 <b>АВТОРИЗАЦІЯ: {account_id.upper()}</b>\n\n"
-            "Будь ласка, введіть номер телефону в міжнародному форматі:\n"
+            "Сесію не знайдено. Будь ласка, введіть телефон для входу:\n"
             "Приклад: <code>+380501112233</code>\n\n"
             "<i>Щоб скасувати, напишіть /ub_cancel</i>",
             parse_mode="HTML"
         )
+        await state.update_data(chosen_acc=account_id)
 
     async def cmd_ub_cancel(self, message: Message, state: FSMContext):
         """Скасовує авторизацію"""
