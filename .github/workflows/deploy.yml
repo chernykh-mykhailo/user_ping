@@ -58,19 +58,12 @@ jobs:
             # Clean up potential conflicts and restart containers
             echo "Restarting containers for: $DEPLOY_TARGET"
             
-            # Helper to stop and remove by container name to prevent conflicts
-            docker rm -f my_ping_bot_prod my_ping_bot_test || true
-            
             if [ "$DEPLOY_TARGET" == "test" ]; then
-              docker compose -p user-ping-test -f docker-compose-test.yml down || true
               docker compose -p user-ping-test -f docker-compose-test.yml up -d --build
             elif [ "$DEPLOY_TARGET" == "prod" ]; then
-              docker compose -p user-ping-prod -f docker-compose.yml down || true
               docker compose -p user-ping-prod -f docker-compose.yml up -d --build
             else
               # Both
-              docker compose -p user-ping-prod -f docker-compose.yml down || true
-              docker compose -p user-ping-test -f docker-compose-test.yml down || true
               docker compose -p user-ping-prod -f docker-compose.yml up -d --build
               docker compose -p user-ping-test -f docker-compose-test.yml up -d --build
             fi
