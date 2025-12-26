@@ -91,8 +91,22 @@ class UserbotCollector:
                 # For commands, we only update the name/last_seen but DON'T remove unreg
                 self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=False)
             else:
-                # For normal messages, update and clear temp unreg
-                self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=True)
+                # v2.6.3: Check word commands without prefix (анрег, рег, всі і т.д.)
+                word_commands = [
+                    'анрег', 'рег', 'суперанрег', 'ганрег', 'гсуперанрег', 'грег',
+                    'всі', 'хтось', 'стата', 'фулстата', 'стоп', 
+                    'unreg', 'reg', 'superunreg', 'gunreg', 'gsuperunreg', 'greg',
+                    'all', 'stats', 'fullstats', 'stop', 'help',
+                    'адміни', 'admins', 'збір', 'sync', 'преміум', 'premium'
+                ]
+                first_word = text.strip().lower().split()[0] if text.strip() else ""
+                
+                if first_word in word_commands:
+                    # Word command - don't remove unreg
+                    self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=False)
+                else:
+                    # Normal message - update and clear temp unreg
+                    self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=True)
     
     async def sync_participants(self, chat_id: int) -> int:
         """
