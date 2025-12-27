@@ -1,6 +1,7 @@
 services:
   ping-bot-test:
     build: .
+    image: ping_test:latest
     container_name: ping_test
     restart: always
     environment:
