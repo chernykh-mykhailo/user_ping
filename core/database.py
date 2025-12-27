@@ -110,6 +110,11 @@ class ChatRepository:
             }
             self.db.save(data)
         return data.get(chat_id)
+
+    def get_all_user_ids(self, chat_id: str) -> List[str]:
+        """Повертає список всіх ID користувачів у чаті"""
+        chat_data = self.get_chat_data(chat_id)
+        return list(chat_data.get("users", {}).keys())
     def get_all_chats(self) -> List[str]:
         """Повертає список ID всіх чатів у базі"""
         data = self.db.load()

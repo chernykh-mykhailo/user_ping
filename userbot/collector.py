@@ -110,17 +110,23 @@ class UserbotCollector:
     
     async def sync_participants(self, chat_id: int) -> int:
         """
-        Синхронізує всіх учасників чату
+        Синхронізує всіх учасників чату та видаляє тих, хто вийшов
         """
         if not self.client.is_connected() or not await self.client.is_user_authorized():
             raise Exception("Userbot not authorized")
 
         clean_chat_id = get_clean_chat_id(chat_id)
-        count = 0
         
+        # Отримуємо список поточних учасників з БД
+        db_users = set(self.chat_repo.get_all_user_ids(clean_chat_id))
+        current_members = set()
+        
+        count = 0
         async for user in self.client.iter_participants(chat_id):
             if not user.bot:
                 user_id = str(user.id)
+                current_members.add(user_id)
+                
                 name = get_user_name(
                     first_name=user.first_name,
                     last_name=user.last_name,
@@ -142,6 +148,12 @@ class UserbotCollector:
                 )
                 count += 1
         
+        # Видаляємо тих, кого немає в поточному списку учасників
+        stale_users = db_users - current_members
+        for uid in stale_users:
+            self.chat_repo.remove_user(clean_chat_id, uid)
+            self.logger.info(f"Cleanup: Видалено неіснуючого учасника {uid} з {clean_chat_id}")
+            
         return count
 
     def _parse_user_status(self, user) -> str:

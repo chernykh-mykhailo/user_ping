@@ -69,6 +69,20 @@ class UserHandler(BaseHandler):
         # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
         self.router.message(Command("spanreg"))(self.cmd_superunreg)
+
+        # v2.6.5: Слідкуємо за виходом учасників (Real-time cleanup)
+        from aiogram.filters import ChatMemberUpdatedFilter, LEFT, KICKED
+        self.router.chat_member(
+            ChatMemberUpdatedFilter(member_status_changed=(LEFT | KICKED))
+        )(self.on_user_left)
+    
+    async def on_user_left(self, event: ChatMemberUpdated):
+        """Видаляє користувача з бази, коли він виходить з чату"""
+        chat_id = get_clean_chat_id(event.chat.id)
+        user_id = str(event.old_chat_member.user.id)
+        
+        self.chat_repo.remove_user(chat_id, user_id)
+        self.logger.info(f"Real-time Cleanup: Користувач {user_id} вийшов з {chat_id}")
     
     async def cmd_start(self, message: Message):
         """Обробляє /start з реферальними посиланнями"""

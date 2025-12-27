@@ -277,8 +277,9 @@ class PingBot:
             self.logger.info(f"🚀 TELEGRAM PING BOT v{__version__}")
             self.logger.info("=" * 50)
             
-            # Запускаємо polling
-            await self.dp.start_polling(self.bot)
+            # Запускаємо polling з відстеженням виходу учасників
+            allowed_updates = ["message", "callback_query", "chat_member", "my_chat_member"]
+            await self.dp.start_polling(self.bot, allowed_updates=allowed_updates)
             
         except Exception as e:
             self.logger.error(f"Критична помилка: {e}")
