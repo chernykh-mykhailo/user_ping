@@ -149,17 +149,30 @@ class AdminHandler(BaseHandler):
                         parse_mode="HTML"
                     )
                 except Exception as ub_err:
+                    error_text = str(ub_err).lower()
                     self.logger.error(f"Userbot sync error: {ub_err}")
-                    await status.edit_text(
-                        f"✅ <b>Синхронізація (Admin Rights): OK</b>\n"
-                        f"👥 Знайдено адмінів: {admin_count}\n\n"
-                        f"⚠️ <b>Повний збір пропущено</b>\n"
-                        f"Щоб зібрати всіх учасників чату, нам потрібна допомога адміністратора.\n\n"
-                        f"👉 <b>Рішення:</b>\n"
-                        f"Додайте в чат: @you_can_try_this\n"
-                        f"I повторіть /sync",
-                        parse_mode="HTML"
-                    )
+                    
+                    if "no workers running" in error_text or "timeout" in error_text:
+                        # Це внутрішні глюки Telegram, а не відсутність адміна
+                        await status.edit_text(
+                            f"✅ <b>Адмін-склад: OK</b> (+{admin_count})\n\n"
+                            f"⚠️ <b>Тимчасова помилка Telegram (500)</b>\n"
+                            f"Сервери Telegram зараз перевантажені або нестабільні. Повний збір учасників неможливий у цей момент.\n\n"
+                            f"🕒 Спробуйте ще раз через 5-10 хвилин.",
+                            parse_mode="HTML"
+                        )
+                    else:
+                        # Ймовірно, справді треба додати юзербота
+                        await status.edit_text(
+                            f"✅ <b>Синхронізація (Admin Rights): OK</b>\n"
+                            f"👥 Знайдено адмінів: {admin_count}\n\n"
+                            f"⚠️ <b>Повний збір пропущено</b>\n"
+                            f"Для повного збору всіх учасників чату, нам потрібна допомога допоміжного акаунта.\n\n"
+                            f"👉 <b>Рішення:</b>\n"
+                            f"Додайте в чат: @you_can_try_this\n"
+                            f"I повторіть /sync",
+                            parse_mode="HTML"
+                        )
             else:
                 # Get total users in chat
                 chat_data = self.chat_repo.get_chat_data(chat_id)
