@@ -4,7 +4,8 @@ Base handler - Abstract base class (OCP, LSP)
 from abc import ABC, abstractmethod
 from aiogram import Router
 from aiogram.types import Message
-from core.database import ChatRepository, PremiumRepository
+from core import ChatRepository
+from core.database import PremiumRepository
 
 
 class BaseHandler(ABC):
