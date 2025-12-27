@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from telethon import TelegramClient, events as t_events, types
 from telethon.sessions import StringSession
-from core.database import ChatRepository
+from core import ChatRepository
 from utils.helpers import get_clean_chat_id, get_user_name
 import os
 from .string_session_manager import StringSessionManager
