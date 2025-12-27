@@ -93,12 +93,6 @@ class JSONDatabase(IDatabase):
             print(f"Помилка при створенні бекапу {backup_path}: {e}")
 
 
-class ChatRepository:
-    """Repository для роботи з чатами (Single Responsibility)"""
-    
-    def __init__(self, db: IDatabase):
-        self.db = db
-    
     def get_chat_data(self, chat_id: str) -> Dict:
         """Отримує дані чату"""
         data = self.db.load()
@@ -111,14 +105,7 @@ class ChatRepository:
             self.db.save(data)
         return data.get(chat_id)
 
-    def get_all_user_ids(self, chat_id: str) -> List[str]:
-        """Повертає список всіх ID користувачів у чаті"""
-        chat_data = self.get_chat_data(chat_id)
-        return list(chat_data.get("users", {}).keys())
-    def get_all_chats(self) -> List[str]:
-        """Повертає список ID всіх чатів у базі"""
-        data = self.db.load()
-        return [cid for cid in data.keys() if cid != "global_unreg"]
+
     
     def save_user(self, chat_id: str, user_id: str, name: str, update_unreg: bool = True, source: str = "message", profile_time: str = None) -> None:
         """
@@ -677,6 +664,10 @@ class ChatRepository:
             
         data = self.db.load()
         return str(user_id) in data.get("bot_admins", [])
+
+    def get_all_user_ids(self, chat_id: str) -> List[str]:
+        """Returns all user IDs in chat (v2.6.5)"""
+        return self.activity.get_all_user_ids(chat_id)
 
     def get_bot_admins(self) -> List[str]:
         """Повертає список ID всіх адмінів бота"""

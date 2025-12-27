@@ -74,6 +74,10 @@ class ChatRepository:
         """Returns active users (excluding unregged)"""
         return self.activity.get_active_users(chat_id)
     
+    def get_all_user_ids(self, chat_id: str) -> List[str]:
+        """Returns all user IDs in chat (v2.6.5)"""
+        return self.activity.get_all_user_ids(chat_id)
+    
     def get_all_chats(self) -> List[str]:
         """Returns all chat IDs"""
         return self.activity.get_all_chats()

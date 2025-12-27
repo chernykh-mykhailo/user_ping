@@ -53,7 +53,7 @@ class UserActivityDomain:
         
         if not isinstance(user_entry, dict):
             user_entry = {"name": safe_name[:20], "last_seen": "2000-01-01T00:00:00"}
-
+ 
         # Logic split by source type
         if source == "message":
             # Throttle: only update if >5 min since last activity
@@ -69,7 +69,7 @@ class UserActivityDomain:
                     return
             except:
                 pass
-
+ 
             user_entry["last_seen"] = now
             user_entry["name"] = safe_name[:20]
             
@@ -82,7 +82,7 @@ class UserActivityDomain:
             
             # Always update name on sync
             user_entry["name"] = safe_name[:20]
-
+ 
         data[chat_id]["users"][user_id] = user_entry
         self.storage.save(data)
     
@@ -96,6 +96,11 @@ class UserActivityDomain:
                 del data[chat_id]["users"][user_id]
                 self.storage.save(data)
     
+    def get_all_user_ids(self, chat_id: str) -> List[str]:
+        """Returns all user IDs for a given chat (v2.6.5)"""
+        chat_data = self._get_chat_data(chat_id)
+        return list(chat_data.get("users", {}).keys())
+
     def get_active_users(self, chat_id: str) -> Dict[str, str]:
         """
         Returns active users (excluding unregged), sorted by activity
