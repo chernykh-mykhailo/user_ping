@@ -1,6 +1,7 @@
 services:
   ping-bot:
     build: .
+    container_name: ping_bot
     restart: always
     environment:
       - BOT_MODE=prod # Продакшн режим

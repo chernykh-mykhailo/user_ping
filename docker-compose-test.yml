@@ -1,6 +1,7 @@
 services:
   ping-bot-test:
     build: .
+    container_name: ping_test
     restart: always
     environment:
       - BOT_MODE=test # Тестовий режим
