@@ -56,6 +56,10 @@ jobs:
             echo "$ENV_FILE" > "$PROJECT_PATH/.env"
             
             # Clean up potential conflicts and restart containers
+            echo "Removing old containers if they exist to prevent name conflicts..."
+            docker stop my_ping_bot_prod my_ping_bot_test || true
+            docker rm my_ping_bot_prod my_ping_bot_test || true
+            
             echo "Restarting containers for: $DEPLOY_TARGET"
             
             if [ "$DEPLOY_TARGET" == "test" ]; then

@@ -1,15 +1,14 @@
 services:
   ping-bot-test:
     build: .
-    container_name: my_ping_bot_test
     restart: always
     environment:
       - BOT_MODE=test # Тестовий режим
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
-      - ./sessions:/app/sessions
+      - ./data_test:/app/data
+      - ./sessions_test:/app/sessions
       - ./.env:/app/.env
     logging:
       driver: "json-file"
