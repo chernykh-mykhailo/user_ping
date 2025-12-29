@@ -26,12 +26,26 @@ def get_user_name(first_name=None, last_name=None, username=None, user_id=None) 
     Повертає найкраще доступне ім'я користувача.
     Пріоритет: First Name -> Last Name -> Username -> ID -> Користувач
     """
+    name_parts = []
+    
+    # 1. Спроба об'єднати Ім'я + Прізвище
     if first_name and first_name.strip():
-        return first_name.strip()
+        name_parts.append(first_name.strip())
+        
     if last_name and last_name.strip():
-        return last_name.strip()
+        name_parts.append(last_name.strip())
+        
+    if name_parts:
+        return " ".join(name_parts)[:20] # Обмежуємо довжину для бази
+        
+    # 2. Якщо немає Імені/Прізвища - беремо Username
     if username and username.strip():
-        return username.strip()
+        username = username.strip().lstrip('@')
+        return f"@{username}"[:20]
+        
+    # 3. Якщо взагалі нічого немає - fallback на ID
     if user_id:
         return f"ID:{user_id}"
+        
     return "Користувач"
+

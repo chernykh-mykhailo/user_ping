@@ -130,6 +130,9 @@ class UserActivityDomain:
         # Filter unregs
         active_list = []
         filtered_count = 0
+        now_dt = datetime.now()
+        ghost_threshold = now_dt - timedelta(days=7)
+        
         for uid, val in all_users_raw.items():
             if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
                 filtered_count += 1
@@ -139,12 +142,22 @@ class UserActivityDomain:
             name = val["name"] if isinstance(val, dict) else val
             
             # Choose best timestamp (v1.8.5)
-            last_seen = val.get("last_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
-            profile_seen = val.get("profile_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            last_seen_str = val.get("last_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
+            profile_seen_str = val.get("profile_seen", "2000-01-01T00:00:00") if isinstance(val, dict) else "2000-01-01T00:00:00"
             
-            # Use max of both
-            actual_seen = max(last_seen, profile_seen)
-            active_list.append((uid, name, actual_seen))
+            # v2.6.6: Ghost Protection
+            # If name is ID:xxx and user wasn't seen for 7 days - we assume they are gone or useless for pings
+            try:
+                actual_seen_str = max(last_seen_str, profile_seen_str)
+                actual_seen_dt = datetime.fromisoformat(actual_seen_str.replace('+00:00', '').replace('Z', ''))
+                
+                if name.startswith("ID:") and actual_seen_dt < ghost_threshold:
+                    logger.debug(f"[GHOST] Skipping ghost user {uid} (last seen {actual_seen_str})")
+                    continue
+            except:
+                pass
+
+            active_list.append((uid, name, last_seen_str if isinstance(val, dict) else "2000-01-01T00:00:00")) # Sort by last_seen (message activity) primarily
         
         logger.info(f"[UNREG DEBUG] filtered_count={filtered_count}, active_count={len(active_list)}")
             
@@ -152,6 +165,7 @@ class UserActivityDomain:
         active_list.sort(key=lambda x: x[2], reverse=True)
         
         return {uid: name for uid, name, _ in active_list}
+
     
     def get_filtered_users(
         self,

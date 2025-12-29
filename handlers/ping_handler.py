@@ -199,12 +199,44 @@ class PingHandler(BaseHandler):
             mentions = []
             
             for uid in chunk:
+                label = users[uid]
+                
+                # v2.6.7: Оновлення імен "на льоту" для ID-користувачів або автоматичне видалення тих, хто вийшов
+                # Ми робимо це тільки якщо ім'я - це ID, або періодично (але тут тільки для ID для швидкості)
+                if not use_emoji and (label.startswith("ID:") or label == "Користувач"):
+                    try:
+                        member = await self.bot.get_chat_member(chat_id, int(uid))
+                        if member:
+                            if member.status in ['left', 'kicked']:
+                                self.logger.info(f"Cleanup: Користувач {uid} вийшов з чату. Видаляю з бази.")
+                                self.chat_repo.remove_user(clean_chat_id, uid)
+                                continue # Пропускаємо пінгування цього юзера
+                                
+                            if member.user:
+                                from utils.helpers import get_user_name as resolve_name
+                                new_name = resolve_name(
+                                    first_name=member.user.first_name,
+                                    last_name=member.user.last_name,
+                                    username=member.user.username,
+                                    user_id=member.user.id
+                                )
+                                if not new_name.startswith("ID:"):
+                                    label = new_name
+                                    # Зберігаємо оновлене ім'я в базу
+                                    self.chat_repo.save_user(clean_chat_id, uid, label, update_unreg=False)
+                    except Exception as e:
+                        # Якщо помилка "user not found" - він точно вийшов
+                        if "user not found" in str(e).lower():
+                            self.chat_repo.remove_user(clean_chat_id, uid)
+                            continue
+                        self.logger.debug(f"Could not resolve name for {uid}: {e}")
+
                 if use_emoji:
                     label = random.choice(EMOJIS)
-                else:
-                    label = users[uid]
                 
                 mentions.append(f'<a href="tg://user?id={uid}">{label}</a>')
+
+
             
             try:
                 # Визначаємо чи потрібна кнопка стоп
@@ -938,6 +970,8 @@ class PingHandler(BaseHandler):
         for uid, name in all_users.items():
             if uid in user_ids:
                 trigger_users[uid] = name
+
+
         
         if not trigger_users:
             await message.answer(f"❌ Тригер <code>!{trigger_name}</code> порожній", parse_mode="HTML")
