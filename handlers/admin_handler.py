@@ -77,7 +77,14 @@ class AdminHandler(BaseHandler):
         # Chat-wide unreg and premium (v2.5.0)
         self.router.message(Command("chat_unreg"))(self.cmd_chat_unreg)
         self.router.message(Command("chat_superunreg"))(self.cmd_chat_superunreg)
+        self.router.message(Command("chat_regall"))(self.cmd_chat_regall)
         self.router.message(Command("admin_grant_chat_premium"))(self.cmd_admin_grant_chat_premium)
+        
+        # Admin Chats List (v2.7.0)
+        self.router.message(Command("admin_chats", "achats"))(self.cmd_admin_chats)
+        self.router.callback_query(F.data.startswith("admin_chat_"))(self.callback_admin_chat_settings)
+        self.router.callback_query(F.data.startswith("admin_limit_"))(self.callback_admin_toggle_limit)
+        self.router.callback_query(F.data.startswith("admin_toggle_reg_"))(self.callback_admin_toggle_reg)
 
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -791,21 +798,23 @@ class AdminHandler(BaseHandler):
         if not self.chat_repo.is_owner(message.from_user.id):
             return await message.answer("❌ Тільки для власників бота.")
         
-        chat_id = get_clean_chat_id(message.chat.id)
-        chat_data = self.chat_repo.get_chat_data(chat_id)
+        args = message.text.split()
+        target_chat_id = args[1] if len(args) > 1 else get_clean_chat_id(message.chat.id)
+        
+        chat_data = self.chat_repo.get_chat_data(target_chat_id)
         users = chat_data.get("users", {})
         
         if not users:
-            return await message.answer("ℹ️ В базі немає користувачів цього чату.")
+            return await message.answer(f"ℹ️ В базі немає користувачів чату <code>{target_chat_id}</code>.", parse_mode="HTML")
         
-        # Add all users to temp_unreg
         count = 0
         for user_id in users.keys():
-            if self.chat_repo.add_to_temp_unreg(chat_id, user_id):
+            if self.chat_repo.add_to_temp_unreg(target_chat_id, user_id):
                 count += 1
         
         await message.answer(
             f"✅ <b>Chat Temp Unreg Complete</b>\n\n"
+            f"💬 Чат: <code>{target_chat_id}</code>\n"
             f"🔕 Анрегнуто: {count} користувачів\n"
             f"<i>Всі тепер в temp_unreg (автовідновлення при активності).</i>",
             parse_mode="HTML"
@@ -816,25 +825,159 @@ class AdminHandler(BaseHandler):
         if not self.chat_repo.is_owner(message.from_user.id):
             return await message.answer("❌ Тільки для власників бота.")
         
-        chat_id = get_clean_chat_id(message.chat.id)
-        chat_data = self.chat_repo.get_chat_data(chat_id)
+        args = message.text.split()
+        target_chat_id = args[1] if len(args) > 1 else get_clean_chat_id(message.chat.id)
+        
+        chat_data = self.chat_repo.get_chat_data(target_chat_id)
         users = chat_data.get("users", {})
         
         if not users:
-            return await message.answer("ℹ️ В базі немає користувачів цього чату.")
+            return await message.answer(f"ℹ️ В базі немає користувачів чату <code>{target_chat_id}</code>.", parse_mode="HTML")
         
-        # Add all users to super_unreg
         count = 0
         for user_id in users.keys():
-            if self.chat_repo.add_to_super_unreg(chat_id, user_id):
+            if self.chat_repo.add_to_super_unreg(target_chat_id, user_id):
                 count += 1
         
         await message.answer(
             f"✅ <b>Chat Super Unreg Complete</b>\n\n"
+            f"💬 Чат: <code>{target_chat_id}</code>\n"
             f"🚫 Анрегнуто: {count} користувачів\n"
             f"<i>Всі тепер в super_unreg (постійний захист).</i>",
             parse_mode="HTML"
         )
+
+    async def cmd_chat_regall(self, message: Message):
+        """Прописує всіх учасників чату назад у базу (Owner only)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
+            return await message.answer("❌ Тільки для власників бота.")
+        
+        args = message.text.split()
+        target_chat_id = args[1] if len(args) > 1 else get_clean_chat_id(message.chat.id)
+        
+        count = self.chat_repo.clear_all_unreg_in_chat(target_chat_id)
+        
+        await message.answer(
+            f"✅ <b>Chat Absolute Reg Complete</b>\n\n"
+            f"💬 Чат: <code>{target_chat_id}</code>\n"
+            f"👤 Реєстровано: {count} користувачів\n"
+            f"<i>Всі списки анрегу для цього чату очищено.</i>",
+            parse_mode="HTML"
+        )
+
+    async def cmd_admin_chats(self, message: Message):
+        """Показує список усіх чатів у базі (Owner only)"""
+        if not self.chat_repo.is_owner(message.from_user.id):
+            return
+            
+        chats = self.chat_repo.get_all_chats()
+        if not chats:
+            return await message.answer("ℹ️ База чатів порожня.")
+            
+        keyboard = []
+        for cid in chats[:20]: # Показати перші 20
+            # Спробуємо отримати назву чату через Bot API
+            try:
+                chat_info = await self.bot.get_chat(cid)
+                title = chat_info.title or f"Chat {cid}"
+            except:
+                title = f"Chat {cid}"
+            
+            keyboard.append([InlineKeyboardButton(text=f"📌 {title}", callback_data=f"admin_chat_view_{cid}")])
+            
+        # Pagination markers if needed (simplified for now)
+        if len(chats) > 20:
+            keyboard.append([InlineKeyboardButton(text=f"... і ще {len(chats)-20} чатів", callback_data="none")])
+            
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer("🏘 <b>Список чатів у базі:</b>", reply_markup=markup, parse_mode="HTML")
+
+    async def callback_admin_chat_settings(self, callback: CallbackQuery):
+        """Керування конкретним чатом в адмінці"""
+        if not self.chat_repo.is_owner(callback.from_user.id):
+            return await callback.answer("❌ Недостатньо прав", show_alert=True)
+            
+        # admin_chat_view_-100123
+        cid = callback.data.replace("admin_chat_view_", "")
+        
+        stats = self.chat_repo.get_stats(cid)
+        unreg_limit = self.chat_repo.get_command_limit(cid, "unreg")
+        super_limit = self.chat_repo.get_command_limit(cid, "superunreg")
+        reg_disabled = self.chat_repo.get_setting(cid, "registration_disabled", False)
+        
+        text = (
+            f"🏘 <b>Керування чатом:</b> <code>{cid}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"👥 <b>Користувачів:</b> {stats['total']}\n"
+            f"✅ <b>Активні:</b> {stats['active']}\n"
+            f"🚫 <b>Unreg:</b> {stats['temp_unreg']} | <b>Super:</b> {stats['super_unreg']}\n\n"
+            f"📝 <b>Обмеження команд:</b>\n"
+            f"• <code>unreg</code>: {'🔴 ВИМКНЕНО' if unreg_limit else '🟢 ДОЗВОЛЕНО'}\n"
+            f"• <code>superunreg</code>: {'🔴 ВИМКНЕНО' if super_limit else '🟢 ДОЗВОЛЕНО'}\n"
+            f"• <b>Авто-реєстрація:</b> {'🔴 ВИМКНЕНО' if reg_disabled else '🟢 УВІМКНЕНО'}"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"{'🟢 Дозволити' if unreg_limit else '🔴 Блокувати'} unreg", callback_data=f"admin_limit_unreg_{cid}"),
+                InlineKeyboardButton(text=f"{'🟢 Дозволити' if super_limit else '🔴 Блокувати'} superunreg", callback_data=f"admin_limit_superunreg_{cid}")
+            ],
+            [
+                InlineKeyboardButton(text=f"{'🟢 Увімкнути активність' if reg_disabled else '🔴 Вимкнути активність'}", callback_data=f"admin_toggle_reg_{cid}")
+            ],
+            [
+                InlineKeyboardButton(text="🔕 Анрег усіх (Temp)", callback_data=f"admin_chat_action_unreg_{cid}"),
+                InlineKeyboardButton(text="👤 Рег усіх (Back)", callback_data=f"admin_chat_action_reg_{cid}")
+            ],
+            [
+                InlineKeyboardButton(text="◀️ До списку", callback_data="admin_chats_back"),
+                InlineKeyboardButton(text="❌ Закрити", callback_data="delete_message")
+            ]
+        ])
+        
+        # Перевіряємо чи це дія чи просто перегляд
+        if "action" in callback.data:
+            action = callback.data.split("_")[3]
+            if action == "unreg":
+                # Викликаємо існуючу логіку
+                users = self.chat_repo.get_chat_data(cid).get("users", {})
+                for uid in users: self.chat_repo.add_to_temp_unreg(cid, uid)
+                await callback.answer("✅ Всіх анрегнуто (тимчасово)")
+            elif action == "reg":
+                self.chat_repo.clear_all_unreg_in_chat(cid)
+                await callback.answer("✅ Всіх зареєстровано")
+                
+            # Оновлюємо статистику після дії
+            stats = self.chat_repo.get_stats(cid)
+            # Перебудовуємо текст і кнопки (код нижче в edit_text виконає це)
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+    async def callback_admin_toggle_reg(self, callback: CallbackQuery):
+        """Перемикає авто-реєстрацію (активність) в чаті"""
+        if not self.chat_repo.is_owner(callback.from_user.id): return
+        
+        # admin_toggle_reg_-100123
+        cid = callback.data.replace("admin_toggle_reg_", "")
+        
+        current = self.chat_repo.get_setting(cid, "registration_disabled", False)
+        self.chat_repo.set_setting(cid, "registration_disabled", not current)
+        
+        await callback.answer(f"✅ {'Авто-реєстрацію увімкнено' if current else 'Авто-реєстрацію вимкнено'}")
+        await self.callback_admin_chat_settings(callback)
+
+    async def callback_admin_toggle_limit(self, callback: CallbackQuery):
+        """Перемикає блокування команд у чаті"""
+        if not self.chat_repo.is_owner(callback.from_user.id): return
+        
+        # admin_limit_unreg_-100123
+        _, _, cmd, cid = callback.data.split("_", 3)
+        
+        current = self.chat_repo.get_command_limit(cid, cmd)
+        self.chat_repo.set_command_limit(cid, cmd, not current)
+        
+        await callback.answer(f"✅ {'Блокування знято' if current else 'Команду заблоковано'}")
+        await self.callback_admin_chat_settings(callback)
 
     async def cmd_admin_grant_chat_premium(self, message: Message):
         """Видає Chat Premium безкоштовно (Owner only)"""
@@ -850,7 +993,7 @@ class AdminHandler(BaseHandler):
             days = int(args[2])
             
             # Import ChatPremiumRepository if not available
-            from core import ChatPremiumRepository
+            from core.database import ChatPremiumRepository
             from core.database import JSONDatabase
             from config import DB_FILE
             

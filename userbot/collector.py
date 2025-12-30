@@ -148,6 +148,18 @@ class UserbotCollector:
                 )
                 count += 1
         
+        # Safety Check: Hidden Members Protection (v2.7.1)
+        # If we see significantly fewer users than in DB (e.g. < 20% of previous size), 
+        # assume we lost visibility (Hidden Members) and skip cleanup.
+        if len(db_users) > 15:
+            retention_rate = len(current_members) / len(db_users)
+            if retention_rate < 0.2:
+                self.logger.warning(
+                    f"PROTECTION: Detected massive user drop ({len(db_users)} -> {len(current_members)}). "
+                    f"Likely 'Hide Members' enabled and Admin rights lost. Cleanup skipped."
+                )
+                return count
+
         # Видаляємо тих, кого немає в поточному списку учасників
         stale_users = db_users - current_members
         for uid in stale_users:

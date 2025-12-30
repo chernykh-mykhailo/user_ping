@@ -231,6 +231,58 @@ class UnregDomain:
         global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
         
         return temp_unreg, super_unreg, global_unreg, global_super
+
+    # === Command Limiting (v2.7.0) ===
+    
+    def get_command_limit(self, chat_id: str, command: str) -> bool:
+        """Checks if a command (unreg/superunreg) is disabled in chat"""
+        data = self.storage.load()
+        chat_data = data.get(chat_id, {})
+        limits = chat_data.get("command_limits", [])
+        return command in limits
+        
+    def set_command_limit(self, chat_id: str, command: str, disabled: bool) -> None:
+        """Enables or disables a command in chat"""
+        data = self.storage.load()
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+            
+        if "command_limits" not in data[chat_id]:
+            data[chat_id]["command_limits"] = []
+            
+        limits = data[chat_id]["command_limits"]
+        if disabled and command not in limits:
+            limits.append(command)
+        elif not disabled and command in limits:
+            limits.remove(command)
+            
+        self.storage.save(data)
+        
+    def clear_all_unreg_in_chat(self, chat_id: str, exclude_super: bool = False) -> int:
+        """
+        Registers ABSOLUTELY EVERYONE in the chat
+        
+        Args:
+            exclude_super: If True, only clears temp_unreg
+        """
+        data = self.storage.load()
+        if chat_id not in data:
+            return 0
+            
+        count = 0
+        if "temp_unreg" in data[chat_id]:
+            count += len(data[chat_id]["temp_unreg"])
+            data[chat_id]["temp_unreg"] = []
+            
+        if not exclude_super and "super_unreg" in data[chat_id]:
+            count += len(data[chat_id]["super_unreg"])
+            data[chat_id]["super_unreg"] = []
+            
+        if count > 0:
+            self.storage.save(data, force=True)
+            
+        return count
+
     
     def clear_temp_unreg_for_user(self, user_id: str) -> int:
         """

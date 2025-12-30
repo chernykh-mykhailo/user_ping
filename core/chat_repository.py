@@ -55,8 +55,11 @@ class ChatRepository:
         """Saves user activity"""
         self.activity.save_user_activity(chat_id, user_id, name, source, profile_time)
         
-        # Handle unreg clearing (v2.3.1 fix: only temp_unreg, NOT super_unreg!)
-        if update_unreg and source == "message":
+        # v2.7.0: Handle unreg clearing with registration_disabled check
+        # If registration_disabled is True, we DO NOT clear temp_unreg automatically
+        reg_disabled = self.chat_settings.get_setting(chat_id, "registration_disabled", False)
+        
+        if update_unreg and source == "message" and not reg_disabled:
             # Super_unreg is PERMANENT - only cleared by explicit /reg command
             self.unreg.remove_from_temp_unreg(chat_id, user_id)
             # Also clear from global temp (NOT global super!)
@@ -126,6 +129,15 @@ class ChatRepository:
     
     def is_globally_unreg(self, user_id: str) -> Dict[str, bool]:
         return self.unreg.is_globally_unreg(user_id)
+    
+    def get_command_limit(self, chat_id: str, command: str) -> bool:
+        return self.unreg.get_command_limit(chat_id, command)
+        
+    def set_command_limit(self, chat_id: str, command: str, disabled: bool) -> None:
+        self.unreg.set_command_limit(chat_id, command, disabled)
+        
+    def clear_all_unreg_in_chat(self, chat_id: str, exclude_super: bool = False) -> int:
+        return self.unreg.clear_all_unreg_in_chat(chat_id, exclude_super)
     
     # === Staff (delegates to StaffRolesDomain) ===
     
