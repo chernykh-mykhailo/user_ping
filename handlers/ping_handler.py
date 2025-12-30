@@ -194,11 +194,25 @@ class PingHandler(BaseHandler):
                 except:
                     pass
                 break
+                break
             
+            # v2.7.0: Dynamic Unreg Check - refresh unreg lists per chunk
+            chat_data = self.chat_repo.get_chat_data(clean_chat_id)
+            temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
+            super_unreg = set(map(str, chat_data.get("super_unreg", [])))
+            # Global unreg check
+            db_data = self.chat_repo.db.load()
+            global_unreg = set(map(str, db_data.get("global_unreg", {}).get("temp", [])))
+            global_super = set(map(str, db_data.get("global_unreg", {}).get("super", [])))
+
             chunk = user_ids[i:i + chunk_size]
             mentions = []
             
             for uid in chunk:
+                # Late check for unreg (in case they unreg during the call)
+                if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+                    continue
+
                 label = users[uid]
                 
                 # v2.6.7: Оновлення імен "на льоту" для ID-користувачів або автоматичне видалення тих, хто вийшов
@@ -262,6 +276,16 @@ class PingHandler(BaseHandler):
                 # FINAL SAFETY: Never show ID in chat
                 if not use_emoji and label.startswith("ID:"):
                     label = "Користувач"
+                    # Alert Admin about ID fallback
+                    try:
+                        error_msg = (
+                            f"⚠️ <b>Ping ID Fallback</b>\n"
+                            f"Chat: {chat_id}\n"
+                            f"User: {uid}\n"
+                            f"Reason: No name resolved"
+                        )
+                        asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
+                    except: pass
 
                 if use_emoji:
                     label = random.choice(EMOJIS)
