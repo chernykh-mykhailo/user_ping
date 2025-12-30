@@ -71,11 +71,35 @@ class UserHandler(BaseHandler):
         self.router.message(Command("spanreg"))(self.cmd_superunreg)
 
         # v2.6.5: Слідкуємо за виходом учасників (Real-time cleanup)
-        from aiogram.filters import ChatMemberUpdatedFilter, LEFT, KICKED
+        from aiogram.filters import ChatMemberUpdatedFilter, LEFT, KICKED, MEMBER, ADMINISTRATOR
         self.router.chat_member(
             ChatMemberUpdatedFilter(member_status_changed=(LEFT | KICKED))
         )(self.on_user_left)
+        
+        self.router.chat_member(
+            ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
+        )(self.on_user_join)
     
+    async def on_user_join(self, event: ChatMemberUpdated):
+        """Додає користувача в базу, коли він входить в чат"""
+        if event.new_chat_member.user.is_bot:
+            return
+            
+        chat_id = get_clean_chat_id(event.chat.id)
+        user = event.new_chat_member.user
+        user_id = str(user.id)
+        
+        name = get_user_name(
+            first_name=user.first_name,
+            last_name=user.last_name,
+            username=user.username,
+            user_id=user.id
+        )
+        
+        # Додаємо в базу як "пасивного" учасника (не знімаємо анрег, якщо він був)
+        self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
+        self.logger.info(f"Real-time Join: Користувач {user_id} приєднався до {chat_id}")
+
     async def on_user_left(self, event: ChatMemberUpdated):
         """Видаляє користувача з бази, коли він виходить з чату"""
         chat_id = get_clean_chat_id(event.chat.id)
