@@ -14,7 +14,7 @@ from config import (
     ADMIN_USER_ID
 )
 from __version__ import __version__
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramServerError
 
 
 class UserHandler(BaseHandler):
@@ -245,6 +245,18 @@ class UserHandler(BaseHandler):
         """Обробляє вибір розділу довідки"""
         section = callback.data.replace("help_", "")
         self.logger.info(f"Help section requested: {section} by {callback.from_user.id}")
+
+        async def safe_edit_text(text, reply_markup=None, **kwargs):
+            for i in range(3):
+                try:
+                    await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML", **kwargs)
+                    return
+                except TelegramServerError:
+                    await asyncio.sleep(0.5)
+                except TelegramBadRequest as e:
+                    if "message is not modified" in str(e): return
+                    raise e
+
         
         try:
             await callback.answer()
@@ -272,7 +284,7 @@ class UserHandler(BaseHandler):
                     "💬 Зв'язок: /feedback\n"
                     f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>"
                 )
-                await callback.message.edit_text(
+                await safe_edit_text(
                     help_text,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                         [
@@ -288,7 +300,6 @@ class UserHandler(BaseHandler):
                             InlineKeyboardButton(text="👑 Premium", callback_data="help_premium")
                         ]
                     ]),
-                    parse_mode="HTML",
                     disable_web_page_preview=True
                 )
             
@@ -311,7 +322,7 @@ class UserHandler(BaseHandler):
                     "• <code>!рег</code> або /reg — Повернутися в списки\n"
                     "• <code>!стоп</code> — Зупинити поточний виклик"
                 )
-                await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+                await safe_edit_text(text, reply_markup=back_button)
             
             elif section == "triggers":
                 text = (
@@ -331,7 +342,7 @@ class UserHandler(BaseHandler):
                     "• <code>!triggers</code> — Список усіх кастомних слів\n"
                     "• <code>!deltrigger слово</code> — Видалити слово-виклик"
                 )
-                await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+                await safe_edit_text(text, reply_markup=back_button)
             
             elif section == "roles":
                 text = (
@@ -349,7 +360,7 @@ class UserHandler(BaseHandler):
                     "• Без ✅ — Не зареєстрований\n\n"
                     "<i>Як в Discord! 🎯</i>"
                 )
-                await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+                await safe_edit_text(text, reply_markup=back_button)
             
             elif section == "templates":
                 text = (
@@ -366,7 +377,7 @@ class UserHandler(BaseHandler):
                     "2. Відповідайте: <code>!addcpattern meeting</code>\n"
                     "3. Використайте: <code>/all meeting</code>"
                 )
-                await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+                await safe_edit_text(text, reply_markup=back_button)
             
             elif section == "management":
                 is_super = callback.from_user.id == ADMIN_USER_ID
@@ -418,10 +429,9 @@ class UserHandler(BaseHandler):
                 if callback.message.chat.type == "private":
                     mgmt_kb.pop(0)
 
-                await callback.message.edit_text(
+                await safe_edit_text(
                     text, 
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=mgmt_kb), 
-                    parse_mode="HTML"
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=mgmt_kb)
                 )
             
             elif section == "premium":
@@ -453,7 +463,7 @@ class UserHandler(BaseHandler):
                     f"• /balance — Статус\n"
                     f"• /refund — Повернення"
                 )
-                await callback.message.edit_text(text, reply_markup=back_button, parse_mode="HTML")
+                await safe_edit_text(text, reply_markup=back_button)
         except TelegramBadRequest as e:
             if "message is not modified" in str(e):
                 try:

@@ -13,7 +13,7 @@ from utils.helpers import get_clean_chat_id
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from config import PING_LIMITS, EMOJIS
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramServerError
 
 
 class PingHandler(BaseHandler):
@@ -205,7 +205,18 @@ class PingHandler(BaseHandler):
                 # Ми робимо це тільки якщо ім'я - це ID, або періодично (але тут тільки для ID для швидкості)
                 if not use_emoji and (label.startswith("ID:") or label == "Користувач"):
                     try:
-                        member = await self.bot.get_chat_member(chat_id, int(uid))
+                        # Retry logic for Bad Gateway
+                        member = None
+                        for attempt in range(3):
+                            try:
+                                member = await self.bot.get_chat_member(chat_id, int(uid))
+                                break
+                            except TelegramServerError:
+                                if attempt == 2: raise
+                                await asyncio.sleep(0.5)
+                            except Exception:
+                                raise
+
                         if member:
                             if member.status in ['left', 'kicked']:
                                 self.logger.info(f"Cleanup: Користувач {uid} вийшов з чату. Видаляю з бази.")
@@ -224,12 +235,33 @@ class PingHandler(BaseHandler):
                                     label = new_name
                                     # Зберігаємо оновлене ім'я в базу
                                     self.chat_repo.save_user(clean_chat_id, uid, label, update_unreg=False)
+                        
+                        # Add small delay to prevent flood
+                        await asyncio.sleep(0.1)
+
                     except Exception as e:
                         # Якщо помилка "user not found" - він точно вийшов
                         if "user not found" in str(e).lower():
                             self.chat_repo.remove_user(clean_chat_id, uid)
                             continue
-                        self.logger.debug(f"Could not resolve name for {uid}: {e}")
+                            
+                        self.logger.error(f"Could not resolve name for {uid}: {e}")
+                        
+                        # Alert Admin (831190060) about the error
+                        try:
+                            error_msg = (
+                                f"⚠️ <b>Ping Name Error</b>\n"
+                                f"Chat: {chat_id}\n"
+                                f"User: {uid}\n"
+                                f"Error: {str(e)[:100]}"
+                            )
+                            # Run in background to not block pings
+                            asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
+                        except: pass
+
+                # FINAL SAFETY: Never show ID in chat
+                if not use_emoji and label.startswith("ID:"):
+                    label = "Користувач"
 
                 if use_emoji:
                     label = random.choice(EMOJIS)
