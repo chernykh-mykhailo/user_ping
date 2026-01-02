@@ -101,6 +101,25 @@ class UserActivityDomain:
         chat_data = self._get_chat_data(chat_id)
         return list(chat_data.get("users", {}).keys())
 
+    def get_user_setting(self, user_id: str, key: str, default: Any = None) -> Any:
+        """Gets user-specific setting (global)"""
+        data = self.storage.load()
+        user_settings = data.get("user_settings", {}).get(str(user_id), {})
+        return user_settings.get(key, default)
+    
+    def set_user_setting(self, user_id: str, key: str, value: Any) -> None:
+        """Sets user-specific setting (global)"""
+        data = self.storage.load()
+        if "user_settings" not in data:
+            data["user_settings"] = {}
+        
+        uid = str(user_id)
+        if uid not in data["user_settings"]:
+            data["user_settings"][uid] = {}
+            
+        data["user_settings"][uid][key] = value
+        self.storage.save(data)
+
     def get_active_users(self, chat_id: str) -> Dict[str, str]:
         """
         Returns active users (excluding unregged), sorted by activity

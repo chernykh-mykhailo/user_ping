@@ -79,6 +79,10 @@ class UserHandler(BaseHandler):
         self.router.chat_member(
             ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
         )(self.on_user_join)
+        
+        # v2.7.5: Personal Emoji
+        self.router.message(Command("setemoji"))(self.cmd_set_emoji)
+        self.router.message(F.text.startswith("!setemoji"))(self.cmd_set_emoji)
     
     async def on_user_join(self, event: ChatMemberUpdated):
         """Додає користувача в базу, коли він входить в чат"""
@@ -183,8 +187,12 @@ class UserHandler(BaseHandler):
             ]
         ])
         
+        # v2.7.5: Personal Emoji in Profile
+        personal_emoji = self.chat_repo.get_user_setting(message.from_user.id, "personal_emoji", "")
+        profile_header = f"{personal_emoji} " if personal_emoji else ""
+        
         help_text = (
-            f"<b>📋 Довідка бота v{__version__}</b>\n\n"
+            f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
             "Оберіть розділ для детальної інформації.\n\n"
             "⚠️ <b>Порада:</b> Для стабільної роботи (авточистка, пін) надайте боту права <b>Адміністратора</b> (видалення та закріплення).\n\n"
             "📢 <b>Пінги</b> — Виклики користувачів\n"
@@ -270,8 +278,11 @@ class UserHandler(BaseHandler):
         
         try:
             if section == "main":
+                personal_emoji = self.chat_repo.get_user_setting(callback.from_user.id, "personal_emoji", "")
+                profile_header = f"{personal_emoji} " if personal_emoji else ""
+                
                 help_text = (
-                    f"<b>📋 Довідка бота v{__version__}</b>\n\n"
+                    f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
                     "Оберіть розділ для детальної інформації.\n\n"
                     "⚠️ <b>Порада:</b> Для стабільної роботи (авточистка, пін) надайте боту права <b>Адміністратора</b> (видалення та закріплення).\n\n"
                     "📢 <b>Пінги</b> — Виклики користувачів\n"
@@ -718,3 +729,31 @@ class UserHandler(BaseHandler):
                 await self.bot.send_message(ADMIN_USER_ID, msg_text, parse_mode="HTML")
             except Exception as e:
                 self.logger.error(f"Failed to notify owner about new chat: {e}")
+
+    async def cmd_set_emoji(self, message: Message):
+        """Встановлює персональний емодзі для профілю"""
+        if message.chat.type != "private":
+            sent = await message.answer("⚠️ Цю команду можна використовувати тільки в <b>особистих повідомленнях</b> боту.")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            sent = await message.answer("ℹ️ Використання: <code>!setemoji 🍎</code>\nЩоб видалити: <code>!setemoji none</code>", parse_mode="HTML")
+            await self.auto_cleanup(message, sent)
+            return
+            
+        emoji = parts[1].strip()
+        
+        if emoji.lower() == "none":
+            self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", "")
+            await message.answer("✅ Персональний емодзі видалено.")
+            return
+            
+        # Валідація: не більше 2 символів (для підтримки складних емодзі може бути більше, але обмежимо візуально)
+        if len(emoji) > 5: # Деякі складні емодзі займають більше ніж 1-2 char в utf-8
+            await message.answer("❌ Занадто довгий текст. Будь ласка, використовуйте один емодзі.")
+            return
+            
+        self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", emoji)
+        await message.answer(f"✅ Персональний емодзі встановлено: {emoji}\nТепер він буде відображатися в /help")

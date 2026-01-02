@@ -29,6 +29,9 @@ class SettingsHandler(BaseHandler):
         self.router.callback_query(F.data.startswith("set_speed_"))(self.callback_set_speed)
         self.router.callback_query(F.data.startswith("cycle_auto_cleanup"))(self.callback_cycle_auto_cleanup)
         self.router.callback_query(F.data == "delete_message")(self.callback_delete_message)
+        
+        # v2.7.5: User Settings
+        self.router.callback_query(F.data == "settings_user_emoji")(self.callback_user_emoji_start)
     
     async def callback_delete_message(self, callback: CallbackQuery):
         """Видаляє повідомлення (закриває меню)"""
@@ -232,6 +235,12 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"Швидкість: {speed_text}", 
                     callback_data=f"change_speed{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій емодзі в профілі", 
+                    callback_data="settings_user_emoji"
                 )
             ],
             [

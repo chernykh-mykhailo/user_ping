@@ -105,6 +105,14 @@ class ChatRepository:
             "super_unreg": super_unreg
         }
     
+    # === User Settings (delegates to ActivityDomain) ===
+    
+    def get_user_setting(self, user_id: str, key: str, default: Any = None) -> Any:
+        return self.activity.get_user_setting(user_id, key, default)
+    
+    def set_user_setting(self, user_id: str, key: str, value: Any) -> None:
+        self.activity.set_user_setting(user_id, key, value)
+    
     # === Unreg (delegates to UnregDomain) ===
     
     def add_to_temp_unreg(self, chat_id: str, user_id: str) -> bool:

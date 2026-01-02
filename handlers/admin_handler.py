@@ -876,6 +876,10 @@ class AdminHandler(BaseHandler):
             
         keyboard = []
         for cid in chats[:20]: # Показати перші 20
+            # v2.7.5: Show registration status
+            reg_disabled = self.chat_repo.get_setting(cid, "registration_disabled", False)
+            reg_icon = "🔴" if reg_disabled else "🟢"
+            
             # Спробуємо отримати назву чату через Bot API
             try:
                 chat_info = await self.bot.get_chat(cid)
@@ -883,7 +887,7 @@ class AdminHandler(BaseHandler):
             except:
                 title = f"Chat {cid}"
             
-            keyboard.append([InlineKeyboardButton(text=f"📌 {title}", callback_data=f"admin_chat_view_{cid}")])
+            keyboard.append([InlineKeyboardButton(text=f"{reg_icon} {title}", callback_data=f"admin_chat_view_{cid}")])
             
         # Pagination markers if needed (simplified for now)
         if len(chats) > 20:
