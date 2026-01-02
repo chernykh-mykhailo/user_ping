@@ -288,7 +288,8 @@ class PingHandler(BaseHandler):
                     except: pass
 
                 if use_emoji:
-                    label = random.choice(EMOJIS)
+                    personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
+                    label = personal if personal else random.choice(EMOJIS)
                 
                 mentions.append(f'<a href="tg://user?id={uid}">{label}</a>')
 

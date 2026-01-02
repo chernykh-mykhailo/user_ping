@@ -364,6 +364,12 @@ class SettingsHandler(BaseHandler):
                     text=f"Швидкість: {speed_text}", 
                     callback_data=f"change_speed{suffix}"
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій емодзі в профілі", 
+                    callback_data="settings_user_emoji"
+                )
             ]
         ])
         
