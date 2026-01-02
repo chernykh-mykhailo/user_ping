@@ -3,7 +3,7 @@ User Activity Domain
 Manages user activity tracking, timestamps, and filtered lists
 ~200 lines, focused responsibility
 """
-from typing import Dict, List
+from typing import Dict, List, Any
 from datetime import datetime, timedelta
 from core.storage import JSONStorage
 
