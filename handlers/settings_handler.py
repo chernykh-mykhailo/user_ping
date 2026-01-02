@@ -557,3 +557,24 @@ class SettingsHandler(BaseHandler):
             pass
             
         await self._show_settings_menu(callback.message, is_edit=True, owner_id=owner_id, original_chat_id=chat_id)
+
+    async def callback_user_emoji_start(self, callback: CallbackQuery):
+        """Пояснює як змінити свій емодзі"""
+        await callback.answer()
+        
+        current_emoji = self.chat_repo.get_user_setting(callback.from_user.id, "personal_emoji", "немає")
+        
+        text = (
+            "<b>👤 Персональний емодзі в профілі</b>\n\n"
+            f"Поточний емодзі: <code>{current_emoji}</code>\n\n"
+            "Щоб змінити емодзі, напишіть боту в <b>особисті повідомлення</b> (якщо ви зараз у групі - перейдіть у ЛС до бота):\n"
+            "<code>!setemoji 🍎</code>\n\n"
+            "<i>Можна використовувати будь-який емодзі або кілька символів (макс 2).</i>"
+        )
+        
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="delete_message")]
+            ]))
+        except:
+            await callback.message.answer(text, parse_mode="HTML")
