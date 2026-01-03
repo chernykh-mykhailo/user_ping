@@ -289,14 +289,17 @@ class AdminHandler(BaseHandler):
         if len(args) < 3:
             current_delay = self.chat_repo.get_global_setting("ping_delay", PING_LIMITS["default_delay"])
             use_ub = self.chat_repo.get_global_setting("use_userbot", True)
+            quote_mode = self.chat_repo.get_global_setting("unreg_quote_mode", "premium")
             
             text = (
                 "🖥 <b>ГЛОБАЛЬНА ПАНЕЛЬ КЕРУВАННЯ</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"🛰 <b>Статус Юзербота:</b> {'✅ ПРАЦЮЄ' if use_ub else '❌ ВИМКНЕНО'}\n"
-                f"⚡️ <b>Затримка (Global):</b> <code>{current_delay}s</code>\n\n"
+                f"⚡️ <b>Затримка (Global):</b> <code>{current_delay}s</code>\n"
+                f"💬 <b>Режим цитат анрегу:</b> <code>{quote_mode}</code> (all/premium)\n\n"
                 "📝 <b>Швидкі команди:</b>\n"
                 "• <code>/apanel set_delay 0.5</code>\n"
+                "• <code>/apanel set_quote_mode all</code> — Всім дозволити цитати\n"
                 "• <code>/admin_toggle_userbot</code>\n"
                 "• <code>/ub_login</code> — Вхід в акаунт\n"
                 "• <code>/ahelp</code> — Всі команди"
@@ -317,6 +320,14 @@ class AdminHandler(BaseHandler):
                 await self._safe_answer(message, f"✅ <b>Global Delay встановлено:</b> {delay}s", parse_mode="HTML")
             except ValueError:
                 await self._safe_answer(message, "❌ Введіть коректне число (наприклад: 0.5)")
+        
+        elif action == "set_quote_mode":
+            mode = value.lower()
+            if mode in ["all", "premium"]:
+                self.chat_repo.set_global_setting("unreg_quote_mode", mode)
+                await self._safe_answer(message, f"✅ <b>Режим цитат анрегу:</b> {mode}", parse_mode="HTML")
+            else:
+                await self._safe_answer(message, "❌ Доступні режими: all, premium")
 
     async def cmd_ahelp(self, message: Message):
         """Швидка допомога для персоналу бота (Staff Help)"""

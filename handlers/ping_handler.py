@@ -273,19 +273,21 @@ class PingHandler(BaseHandler):
                             asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
                         except: pass
 
+                    except: pass
+                
                 # FINAL SAFETY: Never show ID in chat
                 if not use_emoji and label.startswith("ID:"):
                     label = "Користувач"
-                    # Alert Admin about ID fallback
-                    try:
-                        error_msg = (
-                            f"⚠️ <b>Ping ID Fallback</b>\n"
-                            f"Chat: {chat_id}\n"
-                            f"User: {uid}\n"
-                            f"Reason: No name resolved"
-                        )
-                        asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
-                    except: pass
+                    # Alert Admin about ID fallback - DISABLED due to spam
+                    # try:
+                    #     error_msg = (
+                    #         f"⚠️ <b>Ping ID Fallback</b>\n"
+                    #         f"Chat: {chat_id}\n"
+                    #         f"User: {uid}\n"
+                    #         f"Reason: No name resolved"
+                    #     )
+                    #     asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
+                    # except: pass
 
                 if use_emoji:
                     personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
@@ -427,7 +429,11 @@ class PingHandler(BaseHandler):
         if not users:
             return
         
-        await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        # v2.8.0: Check default ping type setting
+        chat_id_str = get_clean_chat_id(message.chat.id)
+        use_emoji = self.chat_repo.get_setting(chat_id_str, "all_ping_emoji", False)
+        
+        await self._send_pings(message.chat.id, users, call_text, use_emoji=use_emoji)
         # Чистимо саму команду
         await self.auto_cleanup(message)
     

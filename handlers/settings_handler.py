@@ -167,6 +167,8 @@ class SettingsHandler(BaseHandler):
         auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
         restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
         unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
+        cleanup_unreg_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
+        all_ping_emoji = self.chat_repo.get_setting(chat_id, "all_ping_emoji", False)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -229,6 +231,18 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'✅' if unreg_notify else '❌'} Анрег-сповіщення: {'ТАК' if unreg_notify else 'НІ'}", 
                     callback_data=f"toggle_unreg_notify{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🗑' if cleanup_unreg_quote else '💾'} Видаляти анрег-цитату: {'ТАК' if cleanup_unreg_quote else 'НІ'}", 
+                    callback_data=f"toggle_cleanup_unreg_quote{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"📢 Тип /all: {'🎭 ЕМОДЗІ' if all_ping_emoji else '📝 ТЕКСТ'}", 
+                    callback_data=f"toggle_all_ping_emoji{suffix}"
                 )
             ],
             [
@@ -296,6 +310,8 @@ class SettingsHandler(BaseHandler):
         auto_cleanup = self.chat_repo.get_setting(chat_id, "auto_cleanup", 0)
         restart_notice = self.chat_repo.get_setting(chat_id, "restart_notice", True)
         unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
+        cleanup_unreg_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
+        all_ping_emoji = self.chat_repo.get_setting(chat_id, "all_ping_emoji", False)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -357,6 +373,18 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'✅' if unreg_notify else '❌'} Анрег-сповіщення: {'ТАК' if unreg_notify else 'НІ'}", 
                     callback_data=f"toggle_unreg_notify{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'🗑' if cleanup_unreg_quote else '💾'} Видаляти анрег-цитату: {'ТАК' if cleanup_unreg_quote else 'НІ'}", 
+                    callback_data=f"toggle_cleanup_unreg_quote{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"📢 Тип /all: {'🎭 ЕМОДЗІ' if all_ping_emoji else '📝 ТЕКСТ'}", 
+                    callback_data=f"toggle_all_ping_emoji{suffix}"
                 )
             ],
             [

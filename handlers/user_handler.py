@@ -499,13 +499,37 @@ class UserHandler(BaseHandler):
         await self.auto_cleanup(message, sent)
     
     async def cmd_unreg(self, message: Message):
-        """Тимчасово вимикає пінги з можливістю авто-видалення"""
+        """Тимчасово вимикає пінги з можливістю авто-видалення та цитатою"""
         if message.chat.type not in ["group", "supergroup"]:
             return
             
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
-        self.logger.info(f"Команда анрег від {user_id} у чаті {chat_id}")
+        
+        # Check for quote
+        quote = None
+        args = message.text.split(maxsplit=1)
+        if len(args) > 1:
+            quote = args[1].strip()
+            
+        # Logic for quote permissions
+        if quote:
+            quote_mode = self.chat_repo.get_global_setting("unreg_quote_mode", "premium") # 'all' or 'premium'
+            has_premium = self.premium_repo.has_premium(user_id)
+            
+            # Якщо режим "premium" і у юзера немає преміум
+            if quote_mode == "premium" and not has_premium:
+                sent = await self._safe_answer(
+                    message, 
+                    "💎 <b>Premium Feature</b>\n\n"
+                    "Залишати повідомлення при анрегу можуть тільки Premium користувачів.\n"
+                    "Власник бота може змінити це в налаштуваннях.",
+                    parse_mode="HTML"
+                )
+                await self.auto_cleanup(message, sent)
+                return
+
+        self.logger.info(f"Команда анрег від {user_id} у чаті {chat_id} (quote={bool(quote)})")
         
         added = self.chat_repo.add_to_temp_unreg(chat_id, user_id)
         
@@ -515,11 +539,37 @@ class UserHandler(BaseHandler):
         self.logger.info(f"[UNREG DEBUG] added={added}, temp_unreg now: {current_temp}")
         
         if added:
-            sent = await self._safe_answer(
-                message, 
-                "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад."
-            )
-            await self.auto_cleanup(message, sent)
+            if quote:
+                name = get_user_name(
+                    message.from_user.first_name, 
+                    message.from_user.last_name, 
+                    message.from_user.username, 
+                    message.from_user.id
+                )
+                # Escaping quote to prevent HTML injection
+                from html import escape
+                safe_quote = escape(quote)
+                
+                text = f"🔕 <b>{name}</b> анрегнувся зі словами:\n<i>{safe_quote}</i>"
+                sent = await message.answer(text, parse_mode="HTML")
+                
+                # Check chat setting for cleanup (default: False - keep quote)
+                cleanup_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
+                
+                if cleanup_quote:
+                    await self.auto_cleanup(message, sent)
+                else:
+                    # Якщо ми НЕ видаляємо відповідь бота, то видаляємо команду юзера для чистоти
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+            else:
+                sent = await self._safe_answer(
+                    message, 
+                    "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад."
+                )
+                await self.auto_cleanup(message, sent)
         else:
             sent = await self._safe_answer(message, "ℹ️ Ви вже в режимі тимчасового анрегу.")
             await self.auto_cleanup(message, sent)
