@@ -36,10 +36,14 @@ class UnregDomain:
             data[chat_id]["temp_unreg"] = []
         if "super_unreg" not in data[chat_id]:
             data[chat_id]["super_unreg"] = []
+        if "super_puper_unreg" not in data[chat_id]:
+            data[chat_id]["super_puper_unreg"] = []
         
-        # Remove from super if exists (downgrade)
+        # Remove from super or super_puper if exists (downgrade)
         if user_id in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].remove(user_id)
+        if user_id in data[chat_id].get("super_puper_unreg", []):
+            data[chat_id]["super_puper_unreg"].remove(user_id)
         
         if user_id not in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].append(user_id)
@@ -64,14 +68,40 @@ class UnregDomain:
             data[chat_id]["temp_unreg"] = []
         if "super_unreg" not in data[chat_id]:
             data[chat_id]["super_unreg"] = []
+        if "super_puper_unreg" not in data[chat_id]:
+            data[chat_id]["super_puper_unreg"] = []
         
-        # Remove from temp (upgrade)
+        # Remove from temp or super_puper
         if user_id in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].remove(user_id)
+        if user_id in data[chat_id].get("super_puper_unreg", []):
+            data[chat_id]["super_puper_unreg"].remove(user_id)
         
         if user_id not in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].append(user_id)
             self.storage.save(data, force=True)  # Force immediate disk write
+            return True
+        return False
+    
+    def add_to_super_puper_unreg(self, chat_id: str, user_id: str) -> bool:
+        """
+        Adds user to 'Super Puper' unreg (Permanent + Mention Protection)
+        """
+        user_id = str(user_id)
+        data = self.storage.load()
+        
+        if chat_id not in data:
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": [], "super_puper_unreg": []}
+        for key in ["temp_unreg", "super_unreg", "super_puper_unreg"]:
+            if key not in data[chat_id]: data[chat_id][key] = []
+            
+        # Remove from other lists
+        if user_id in data[chat_id]["temp_unreg"]: data[chat_id]["temp_unreg"].remove(user_id)
+        if user_id in data[chat_id]["super_unreg"]: data[chat_id]["super_unreg"].remove(user_id)
+        
+        if user_id not in data[chat_id]["super_puper_unreg"]:
+            data[chat_id]["super_puper_unreg"].append(user_id)
+            self.storage.save(data, force=True)
             return True
         return False
     
@@ -114,6 +144,8 @@ class UnregDomain:
             data[chat_id]["temp_unreg"] = []
         if "super_unreg" not in data[chat_id]:
             data[chat_id]["super_unreg"] = []
+        if "super_puper_unreg" not in data[chat_id]:
+            data[chat_id]["super_puper_unreg"] = []
         
         removed = False
         if user_id in data[chat_id].get("temp_unreg", []):
@@ -121,6 +153,9 @@ class UnregDomain:
             removed = True
         if user_id in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].remove(user_id)
+            removed = True
+        if user_id in data[chat_id].get("super_puper_unreg", []):
+            data[chat_id]["super_puper_unreg"].remove(user_id)
             removed = True
         
         if removed:
@@ -140,7 +175,8 @@ class UnregDomain:
         chat_data = data.get(chat_id, {})
         return {
             "temp": user_id in chat_data.get("temp_unreg", []),
-            "super": user_id in chat_data.get("super_unreg", [])
+            "super": user_id in chat_data.get("super_unreg", []),
+            "super_puper": user_id in chat_data.get("super_puper_unreg", [])
         }
     
     # === Global Unreg (all chats) ===
@@ -226,11 +262,12 @@ class UnregDomain:
         
         temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
         super_unreg = set(map(str, chat_data.get("super_unreg", [])))
+        super_puper = set(map(str, chat_data.get("super_puper_unreg", [])))
         
         global_unreg = set(map(str, data.get("global_unreg", {}).get("temp", [])))
         global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
         
-        return temp_unreg, super_unreg, global_unreg, global_super
+        return temp_unreg, super_unreg, super_puper, global_unreg, global_super
 
     # === Command Limiting (v2.7.0) ===
     
@@ -277,6 +314,10 @@ class UnregDomain:
         if not exclude_super and "super_unreg" in data[chat_id]:
             count += len(data[chat_id]["super_unreg"])
             data[chat_id]["super_unreg"] = []
+            
+        if not exclude_super and "super_puper_unreg" in data[chat_id]:
+            count += len(data[chat_id]["super_puper_unreg"])
+            data[chat_id]["super_puper_unreg"] = []
             
         if count > 0:
             self.storage.save(data, force=True)

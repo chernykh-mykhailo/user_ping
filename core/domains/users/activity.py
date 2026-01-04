@@ -40,10 +40,10 @@ class UserActivityDomain:
         
         # Initialize chat if doesn't exist
         if chat_id not in data:
-            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": []}
+            data[chat_id] = {"users": {}, "temp_unreg": [], "super_unreg": [], "super_puper_unreg": []}
         
         if "users" not in data[chat_id]:
-            data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": []}
+            data[chat_id] = {"users": data[chat_id], "temp_unreg": [], "super_unreg": [], "super_puper_unreg": []}
         
         # HTML escaping
         safe_name = name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -136,12 +136,13 @@ class UserActivityDomain:
         all_users_raw = chat_data.get("users", {})
         
         # Get unreg sets (delegating to UnregDomain would be circular, so we read directly)
-        temp_unreg, super_unreg, global_unreg, global_super = self._get_unreg_sets(chat_id)
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper = self._get_unreg_sets(chat_id)
         
         # DEBUG: Log unreg info
         logger.info(f"[UNREG DEBUG] chat_id={chat_id}")
         logger.info(f"[UNREG DEBUG] temp_unreg={temp_unreg}")
         logger.info(f"[UNREG DEBUG] super_unreg={super_unreg}")
+        logger.info(f"[UNREG DEBUG] super_puper={super_puper}")
         logger.info(f"[UNREG DEBUG] global_unreg={global_unreg}")
         logger.info(f"[UNREG DEBUG] global_super={global_super}")
         logger.info(f"[UNREG DEBUG] total_users={len(all_users_raw)}")
@@ -153,7 +154,7 @@ class UserActivityDomain:
         ghost_threshold = now_dt - timedelta(days=7)
         
         for uid, val in all_users_raw.items():
-            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super or uid in super_puper:
                 filtered_count += 1
                 continue
             
@@ -206,13 +207,13 @@ class UserActivityDomain:
         chat_data = self._get_chat_data(chat_id)
         all_users = chat_data.get("users", {})
         
-        temp_unreg, super_unreg, global_unreg, global_super = self._get_unreg_sets(chat_id)
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper = self._get_unreg_sets(chat_id)
         
         threshold = datetime.now() - timedelta(hours=hours)
         result = {}
         
         for uid, val in all_users.items():
-            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super:
+            if uid in temp_unreg or uid in super_unreg or uid in global_unreg or uid in global_super or uid in super_puper:
                 continue
             
             if not isinstance(val, dict):
@@ -253,23 +254,25 @@ class UserActivityDomain:
             data[chat_id] = {
                 "users": {},
                 "temp_unreg": [],
-                "super_unreg": []
+                "super_unreg": [],
+                "super_puper_unreg": []
             }
             self.storage.save(data)
         return data.get(chat_id)
     
     def _get_unreg_sets(self, chat_id: str) -> tuple:
         """
-        Internal: Returns all 4 unreg sets as string sets
-        (temp_unreg, super_unreg, global_temp, global_super)
+        Internal: Returns all 5 unreg sets as string sets
+        (temp_unreg, super_unreg, global_temp, global_super, super_puper)
         """
         data = self.storage.load()
         chat_data = data.get(chat_id, {})
         
         temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
         super_unreg = set(map(str, chat_data.get("super_unreg", [])))
+        super_puper = set(map(str, chat_data.get("super_puper_unreg", [])))
         
         global_unreg = set(map(str, data.get("global_unreg", {}).get("temp", [])))
         global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
         
-        return temp_unreg, super_unreg, global_unreg, global_super
+        return temp_unreg, super_unreg, global_unreg, global_super, super_puper

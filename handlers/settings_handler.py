@@ -169,6 +169,7 @@ class SettingsHandler(BaseHandler):
         unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
         cleanup_unreg_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
         all_ping_emoji = self.chat_repo.get_setting(chat_id, "all_ping_emoji", False)
+        allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -237,6 +238,12 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'🗑' if cleanup_unreg_quote else '💾'} Видаляти анрег-цитату: {'ТАК' if cleanup_unreg_quote else 'НІ'}", 
                     callback_data=f"toggle_cleanup_unreg_quote{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if allow_unreg else '🚫'} Дозвіл анрегатись: {'ТАК' if allow_unreg else 'НІ'}", 
+                    callback_data=f"toggle_allow_unreg{suffix}"
                 )
             ],
             [
@@ -312,6 +319,7 @@ class SettingsHandler(BaseHandler):
         unreg_notify = self.chat_repo.get_setting(chat_id, "unreg_notify", False)
         cleanup_unreg_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
         all_ping_emoji = self.chat_repo.get_setting(chat_id, "all_ping_emoji", False)
+        allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
         
         # Отримуємо поточну швидкість
         current_delay = self.chat_repo.get_setting(chat_id, "ping_delay", PING_LIMITS["default_delay"])
@@ -379,6 +387,12 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'🗑' if cleanup_unreg_quote else '💾'} Видаляти анрег-цитату: {'ТАК' if cleanup_unreg_quote else 'НІ'}", 
                     callback_data=f"toggle_cleanup_unreg_quote{suffix}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if allow_unreg else '🚫'} Дозвіл анрегатись: {'ТАК' if allow_unreg else 'НІ'}", 
+                    callback_data=f"toggle_allow_unreg{suffix}"
                 )
             ],
             [

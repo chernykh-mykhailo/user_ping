@@ -100,14 +100,13 @@ class ActivityMiddleware(BaseMiddleware):
                         chat_id = get_clean_chat_id(event.chat.id)
                         # Отримуємо списки
                         chat_data = self.chat_repo.get_chat_data(chat_id)
-                        local_super = set(map(str, chat_data.get("super_unreg", [])))
+                        local_puper = set(map(str, chat_data.get("super_puper_unreg", [])))
                         
                         for whom_id in mentioned_ids:
-                            # Перевірка локального та глобального супер-анрегу
-                            is_local = whom_id in local_super
-                            is_global = self.chat_repo.is_globally_unreg(whom_id)["super"]
+                            # Mention Protection ТІЛЬКИ для Super Puper Unreg (v2.7.0)
+                            is_protected = whom_id in local_puper
                             
-                            if is_local or is_global:
+                            if is_protected:
                                 # Перевірка кулдауну (1 хв)
                                 key = (chat_id, whom_id)
                                 last_warn = self._warning_cooldowns.get(key, 0)

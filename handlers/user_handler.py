@@ -51,6 +51,9 @@ class UserHandler(BaseHandler):
         
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
         self.router.message(F.text.regexp(r'^\s*!?суперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_superunreg)
+
+        self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(r'^\s*!?суперпуперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_superpuperunreg)
         
         self.router.message(Command("reg"))(self.cmd_reg)
         self.router.message(F.text.regexp(r'^\s*!?рег(\s|$)', flags=re.IGNORECASE))(self.cmd_reg)
@@ -506,6 +509,25 @@ class UserHandler(BaseHandler):
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
         
+        # Check if unreg is allowed in this chat
+        allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
+        if not allow_unreg:
+            # Check if user is admin (admins can always unreg)
+            is_admin = await self._is_admin(message.chat.id, message.from_user.id, message.bot)
+            if not is_admin:
+                sent = await self._safe_answer(
+                    message, 
+                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
+                    "У цьому чаті не можна відключати сповіщення.",
+                    parse_mode="HTML"
+                )
+                await self.auto_cleanup(message, sent)
+                try:
+                    await message.delete()
+                except:
+                    pass
+                return
+        
         # Check for quote
         quote = None
         args = message.text.split(maxsplit=1)
@@ -580,6 +602,24 @@ class UserHandler(BaseHandler):
         chat_id = get_clean_chat_id(message.chat.id)
         self.logger.info(f"Команда SUPERUNREG від {user_id} у чаті {chat_id}")
         
+        # Check if unreg is allowed in this chat
+        allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
+        if not allow_unreg:
+            is_admin = await self._is_admin(message.chat.id, message.from_user.id, message.bot)
+            if not is_admin:
+                sent = await self._safe_answer(
+                    message, 
+                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
+                    "У цьому чаті не можна використовувати SuperUnreg.",
+                    parse_mode="HTML"
+                )
+                await self.auto_cleanup(message, sent)
+                try:
+                    await message.delete()
+                except:
+                    pass
+                return
+
         # Перевірка: Personal Premium АБО Chat Premium
         has_personal = self.premium_repo.has_premium(user_id)
         
@@ -617,6 +657,77 @@ class UserHandler(BaseHandler):
             sent = await message.answer("ℹ️ <b>Ви вже захищені SuperUnreg у цьому чаті.</b>", parse_mode="HTML")
         
         # SuperUnreg повідомлення висять довше (60с), щоб всі бачили статус
+        await self.auto_cleanup(message, sent, custom_delay=60)
+    
+    async def cmd_superpuperunreg(self, message: Message):
+        """Супер-Пупер Анрег: Те саме, що SuperUnreg, але з перевіркою прав"""
+        if message.chat.type not in ["group", "supergroup"]:
+            return
+            
+        chat_id = get_clean_chat_id(message.chat.id)
+        user_id = str(message.from_user.id)
+        
+        # Перевірка налаштування allow_unreg
+        allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
+        if not allow_unreg:
+            # Перевіряємо чи юзер адмін
+            is_admin = await self._is_admin(message.chat.id, message.from_user.id)
+            if not is_admin:
+                sent = await self._safe_answer(
+                    message, 
+                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\nУ цьому чаті не можна відключати сповіщення.",
+                    parse_mode="HTML"
+                )
+                await self.auto_cleanup(message, sent)
+                return
+
+        # Перевірка Premium
+        has_personal = self.premium_repo.has_premium(user_id)
+        from core import ChatPremiumRepository
+        from core.database import JSONDatabase
+        from config import DB_FILE
+        db = JSONDatabase(DB_FILE)
+        chat_premium_repo = ChatPremiumRepository(db)
+        has_chat_premium = chat_premium_repo.has_chat_premium(chat_id)
+        
+        if not has_personal and not has_chat_premium:
+            sent = await message.answer(
+                "👑 <b>PREMIUM REQUIRED</b>\n\n"
+                "Функція <b>SuperPuperUnreg</b> дозволяє назавжди зникнути з радарів пінгу.\n\n"
+                "✨ <b>Як отримати:</b>\n"
+                "• Personal Premium: /premium\n"
+                "• Chat Premium: попросіть адміна чату",
+                parse_mode="HTML"
+            )
+            await self.auto_cleanup(message, sent, custom_delay=30)
+            return
+            
+        added = self.chat_repo.add_to_super_puper_unreg(chat_id, user_id)
+        
+        if added:
+            # Перевірка прав бота на видалення (для Mention Protection)
+            try:
+                bot_member = await message.bot.get_chat_member(message.chat.id, message.bot.id)
+                can_delete = getattr(bot_member, 'can_delete_messages', True)
+            except:
+                can_delete = True
+                
+            warning_text = ""
+            if not can_delete:
+                warning_text = (
+                    "\n\n⚠️ <b>Увага:</b> У бота немає прав на видалення повідомлень!\n"
+                    "Вас не будуть пінгувати через команди, але бот <b>не зможе видаляти</b> ручні теги від інших користувачів."
+                )
+
+            sent = await message.answer(
+                f"🛡 <b>SUPER PUPER UNREG: АКТИВОВАНО</b>\n\n"
+                f"💎 Ви успішно використали свій <b>Premium</b> статус. Тепер учасники не зможуть пінгнути вас у цьому чаті, навіть якщо ви будете активні.\n"
+                f"<i>Повернутися: /reg</i>{warning_text}",
+                parse_mode="HTML"
+            )
+        else:
+            sent = await message.answer("ℹ️ <b>Ви вже захищені SuperPuperUnreg у цьому чаті.</b>", parse_mode="HTML")
+        
         await self.auto_cleanup(message, sent, custom_delay=60)
     
     async def cmd_reg(self, message: Message):

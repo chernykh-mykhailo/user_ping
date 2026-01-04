@@ -96,13 +96,15 @@ class ChatRepository:
         total = len(chat_data.get("users", {}))
         temp_unreg = len(chat_data.get("temp_unreg", []))
         super_unreg = len(chat_data.get("super_unreg", []))
-        active = total - temp_unreg - super_unreg
+        super_puper = len(chat_data.get("super_puper_unreg", []))
+        active = total - temp_unreg - super_unreg - super_puper
         
         return {
             "total": total,
             "active": active,
             "temp_unreg": temp_unreg,
-            "super_unreg": super_unreg
+            "super_unreg": super_unreg,
+            "super_puper": super_puper
         }
     
     # === User Settings (delegates to ActivityDomain) ===
@@ -120,6 +122,9 @@ class ChatRepository:
     
     def add_to_super_unreg(self, chat_id: str, user_id: str) -> bool:
         return self.unreg.add_to_super_unreg(chat_id, user_id)
+    
+    def add_to_super_puper_unreg(self, chat_id: str, user_id: str) -> bool:
+        return self.unreg.add_to_super_puper_unreg(chat_id, user_id)
     
     def remove_from_temp_unreg(self, chat_id: str, user_id: str) -> bool:
         """Removes from temp_unreg only (for middleware - doesn't touch super_unreg)"""

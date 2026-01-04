@@ -90,12 +90,16 @@ class UserbotCollector:
             if text.startswith(('/', '!')):
                 # For commands, we only update the name/last_seen but DON'T remove unreg
                 self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=False)
+            elif not text.strip():
+                # v2.8.0: If message has no text (Sticker, GIF, etc) - update activity BUT KEEP UNREG
+                # This matches user expectation that "only writing text" breaks temp unreg
+                self.chat_repo.save_user(chat_id, user_id, name, source="message", update_unreg=False)
             else:
                 # v2.6.3: Check word commands without prefix (анрег, рег, всі і т.д.)
                 word_commands = [
-                    'анрег', 'рег', 'суперанрег', 'ганрег', 'гсуперанрег', 'грег',
+                    'анрег', 'рег', 'суперанрег', 'суперпуперанрег', 'спа', 'ганрег', 'гсуперанрег', 'грег',
                     'всі', 'хтось', 'стата', 'фулстата', 'стоп', 
-                    'unreg', 'reg', 'superunreg', 'gunreg', 'gsuperunreg', 'greg',
+                    'unreg', 'reg', 'superunreg', 'superpuperunreg', 'spa', 'gunreg', 'gsuperunreg', 'greg',
                     'all', 'stats', 'fullstats', 'stop', 'help',
                     'адміни', 'admins', 'збір', 'sync', 'преміум', 'premium'
                 ]
