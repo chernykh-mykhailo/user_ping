@@ -86,6 +86,21 @@ class BaseHandler(ABC):
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).error(f"Помилка при безпечній відправці: {e}")
-                # Для звичайних помилок - один раз пробуємо просто відправити
                 try: return await message.answer(text, **kwargs)
                 except: return None
+
+    async def _is_admin(self, chat_id: int, user_id: int, bot=None) -> bool:
+        """Перевіряє права адміністратора (доступно для всіх хендлерів)"""
+        if self.chat_repo.is_bot_moderator(user_id):
+            return True
+            
+        # Якщо бот не переданий - намагаємось використати self.bot (якщо є)
+        # Але BaseHandler не має self.bot, тому краще передавати явно
+        if not bot:
+             return False # або raise Error, але для безпеки False
+            
+        try:
+            member = await bot.get_chat_member(chat_id, user_id)
+            return member.status in ['creator', 'administrator']
+        except:
+            return False
