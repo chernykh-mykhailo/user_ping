@@ -9,6 +9,11 @@ from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from aiogram.exceptions import TelegramBadRequest
 from config import PING_LIMITS
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+class SettingsStates(StatesGroup):
+    waiting_for_unreg_msg = State()
 
 class SettingsHandler(BaseHandler):
     """
@@ -32,6 +37,10 @@ class SettingsHandler(BaseHandler):
         
         # v2.7.5: User Settings
         self.router.callback_query(F.data == "settings_user_emoji")(self.callback_user_emoji_start)
+
+        # v2.8.0: Custom Unreg Message
+        self.router.callback_query(F.data.startswith("change_unreg_msg_"))(self.callback_change_unreg_msg)
+        self.router.message(SettingsStates.waiting_for_unreg_msg)(self.process_unreg_msg)
     
     async def callback_delete_message(self, callback: CallbackQuery):
         """Видаляє повідомлення (закриває меню)"""
@@ -244,6 +253,12 @@ class SettingsHandler(BaseHandler):
                 InlineKeyboardButton(
                     text=f"{'✅' if allow_unreg else '🚫'} Дозвіл анрегатись: {'ТАК' if allow_unreg else 'НІ'}", 
                     callback_data=f"toggle_allow_unreg{suffix}"
+                )
+            ],
+            [
+                 InlineKeyboardButton(
+                    text="📝 Текст заборони анрегу", 
+                    callback_data=f"change_unreg_msg{suffix}"
                 )
             ],
             [
@@ -626,3 +641,79 @@ class SettingsHandler(BaseHandler):
             ]))
         except:
             await callback.message.answer(text, parse_mode="HTML")
+
+    # === Custom Unreg Message (v2.8.0) ===
+
+    async def callback_change_unreg_msg(self, callback: CallbackQuery, state: FSMContext):
+        """Починає процес зміни повідомлення про заборону анрегу"""
+        parts = callback.data.split("_")
+        # change_unreg_msg_owner_chat
+        
+        owner_id = None 
+        original_chat_id = get_clean_chat_id(callback.message.chat.id)
+        
+        if len(parts) >= 5:
+             try:
+                 owner_id = int(parts[3])
+                 original_chat_id = parts[4]
+             except: pass
+
+        # Перевірка прав (якщо це власник меню)
+        if owner_id and callback.from_user.id != owner_id:
+             try:
+                 await callback.answer("❌ Це меню не для вас!", show_alert=True)
+             except TelegramBadRequest:
+                 pass
+             return
+
+        # Get current message
+        current_msg = self.chat_repo.get_setting(original_chat_id, "unreg_denied_message")
+        if not current_msg:
+            current_msg = "🚫 <b>Анрег вимкнено адміністратором чату.</b>\nУ цьому чаті не можна відключати сповіщення."
+
+        msg_text = (
+            "📝 <b>Редагування повідомлення про заборону</b>\n\n"
+            f"Поточне повідомлення:\n"
+            f"<blockquote>{current_msg}</blockquote>\n\n"
+            "👇 <b>Надішліть нове повідомлення (текст):</b>\n"
+            "В ньому можна використовувати HTML теги (b, i, code).\n"
+            "<i>Надішліть 'reset' щоб повернути стандартне.</i>"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Скасувати", callback_data="delete_message")]
+        ])
+        
+        try:
+            await callback.message.edit_text(msg_text, parse_mode="HTML", reply_markup=keyboard)
+        except:
+            await callback.message.answer(msg_text, parse_mode="HTML", reply_markup=keyboard)
+            
+        await state.update_data(editing_chat_id=original_chat_id, owner_id=owner_id)
+        await state.set_state(SettingsStates.waiting_for_unreg_msg)
+
+    async def process_unreg_msg(self, message: Message, state: FSMContext):
+        """Зберігає нове повідомлення"""
+        data = await state.get_data()
+        chat_id = data.get("editing_chat_id")
+        owner_id = data.get("owner_id")
+        
+        if not chat_id:
+            await state.clear()
+            return
+
+        text = message.html_text if hasattr(message, "html_text") else message.text
+        
+        if text.lower().strip() == "reset":
+            text = None # Видалить з бази, поверне дефолт
+            resp_text = "🔄 Повернуто стандартне повідомлення."
+        else:
+            resp_text = f"✅ <b>Повідомлення оновлено!</b>\n\n<blockquote>{text}</blockquote>"
+            
+        self.chat_repo.set_setting(chat_id, "unreg_denied_message", text)
+        
+        await message.answer(resp_text, parse_mode="HTML")
+        
+        # Повертаємо меню
+        await self._show_settings_menu(message, is_edit=False, owner_id=owner_id, original_chat_id=chat_id)
+        await state.clear()

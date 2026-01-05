@@ -349,3 +349,18 @@ class UnregDomain:
             self.storage.save(data)
         
         return cleared_count
+    
+    # === Custom Messages (v2.8.0) ===
+    
+    def get_denied_message(self, chat_id: str) -> str:
+        """Gets custom message for blocked unregistration"""
+        data = self.storage.load()
+        return data.get(chat_id, {}).get("unreg_denied_message")
+
+    def set_denied_message(self, chat_id: str, message: str) -> None:
+        """Sets custom message for blocked unregistration"""
+        data = self.storage.load()
+        if chat_id not in data:
+            data[chat_id] = {}
+        data[chat_id]["unreg_denied_message"] = message
+        self.storage.save(data, force=True)

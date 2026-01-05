@@ -515,10 +515,15 @@ class UserHandler(BaseHandler):
             # Check if user is admin (admins can always unreg)
             is_admin = await self._is_admin(message.chat.id, message.from_user.id, message.bot)
             if not is_admin:
+                denied_msg = self.chat_repo.get_setting(chat_id, "unreg_denied_message")
+                if not denied_msg:
+                    denied_msg = (
+                        "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
+                        "У цьому чаті не можна відключати сповіщення."
+                    )
                 sent = await self._safe_answer(
                     message, 
-                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
-                    "У цьому чаті не можна відключати сповіщення.",
+                    denied_msg,
                     parse_mode="HTML"
                 )
                 await self.auto_cleanup(message, sent)
@@ -607,10 +612,15 @@ class UserHandler(BaseHandler):
         if not allow_unreg:
             is_admin = await self._is_admin(message.chat.id, message.from_user.id, message.bot)
             if not is_admin:
+                denied_msg = self.chat_repo.get_setting(chat_id, "unreg_denied_message")
+                if not denied_msg:
+                    denied_msg = (
+                        "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
+                        "У цьому чаті не можна використовувати SuperUnreg."
+                    )
                 sent = await self._safe_answer(
                     message, 
-                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
-                    "У цьому чаті не можна використовувати SuperUnreg.",
+                    denied_msg,
                     parse_mode="HTML"
                 )
                 await self.auto_cleanup(message, sent)
@@ -673,9 +683,13 @@ class UserHandler(BaseHandler):
             # Перевіряємо чи юзер адмін
             is_admin = await self._is_admin(message.chat.id, message.from_user.id)
             if not is_admin:
+                denied_msg = self.chat_repo.get_setting(chat_id, "unreg_denied_message")
+                if not denied_msg:
+                    denied_msg = "🚫 <b>Анрег вимкнено адміністратором чату.</b>\nУ цьому чаті не можна відключати сповіщення."
+
                 sent = await self._safe_answer(
                     message, 
-                    "🚫 <b>Анрег вимкнено адміністратором чату.</b>\nУ цьому чаті не можна відключати сповіщення.",
+                    denied_msg,
                     parse_mode="HTML"
                 )
                 await self.auto_cleanup(message, sent)
