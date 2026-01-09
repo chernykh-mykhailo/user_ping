@@ -254,8 +254,10 @@ class PingHandler(BaseHandler):
                         await asyncio.sleep(0.1)
 
                     except Exception as e:
-                        # Якщо помилка "user not found" - він точно вийшов
-                        if "user not found" in str(e).lower():
+                        # Якщо помилка "user not found" або подібні - він точно вийшов або ID недійсний
+                        err_msg = str(e).lower()
+                        if any(x in err_msg for x in ["user not found", "participant id invalid", "user id invalid", "member not found"]):
+                            self.logger.info(f"Cleanup: Користувач {uid} більше не в чаті ({err_msg}). Видаляю з бази.")
                             self.chat_repo.remove_user(clean_chat_id, uid)
                             continue
                             
