@@ -1,17 +1,28 @@
 """
 User handlers - команди користувача (SRP)
 """
+
 import logging
 import asyncio
 from aiogram import F
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ChatMemberUpdated
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+    ChatMemberUpdated,
+)
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id, get_user_name
 from config import (
-    PREMIUM_PLANS, CHAT_PREMIUM_PLANS, FEEDBACK_BOT, 
-    PROJECTS_CHANNEL, REFERRAL_BONUS_SIGNUP, REFERRAL_BONUS_PREMIUM,
-    ADMIN_USER_ID
+    PREMIUM_PLANS,
+    CHAT_PREMIUM_PLANS,
+    FEEDBACK_BOT,
+    PROJECTS_CHANNEL,
+    REFERRAL_BONUS_SIGNUP,
+    REFERRAL_BONUS_PREMIUM,
+    ADMIN_USER_ID,
 )
 from __version__ import __version__
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
@@ -22,178 +33,230 @@ class UserHandler(BaseHandler):
     Обробляє команди користувачів
     Single Responsibility: тільки користувацькі команди
     """
-    
+
     def __init__(self, chat_repo, premium_repo):
         self.logger = logging.getLogger(__name__)
         super().__init__(chat_repo, premium_repo)
-    
+
     def register_handlers(self):
         """Реєструє хендлери користувачів"""
         # Help
         self.router.message(Command("help"))(self.cmd_help)
-        self.router.message(Command("start"))(self.cmd_start)  # Окремо для реферальних посилань
-        self.router.message(F.text.regexp(r'^!?(хелп|допомога)', flags=0))(self.cmd_help)
-        self.router.callback_query(F.data.startswith("help_"))(self.callback_help_section)
-        
+        self.router.message(Command("start"))(
+            self.cmd_start
+        )  # Окремо для реферальних посилань
+        self.router.message(F.text.regexp(r"^!?(хелп|допомога)", flags=0))(
+            self.cmd_help
+        )
+        self.router.callback_query(F.data.startswith("help_"))(
+            self.callback_help_section
+        )
+
         # Contact
         self.router.message(Command("feedback", "contact"))(self.cmd_feedback)
-        
+
         # New Chat Notification (v2.4.2)
         from aiogram.filters import ChatMemberUpdatedFilter, MEMBER, ADMINISTRATOR
+
         self.router.my_chat_member(
             ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
         )(self.on_bot_join)
-        
+
         # Unreg/Reg - case-insensitive for Ukrainian commands (Анрег = анрег)
         import re
+
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r'^\s*!?анрег(\s|$)', flags=re.IGNORECASE))(self.cmd_unreg)
-        
+        self.router.message(F.text.regexp(r"^\s*!?анрег(\s|$)", flags=re.IGNORECASE))(
+            self.cmd_unreg
+        )
+
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(r'^\s*!?суперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_superunreg)
+        self.router.message(
+            F.text.regexp(r"^\s*!?суперанрег(\s|$)", flags=re.IGNORECASE)
+        )(self.cmd_superunreg)
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
-        self.router.message(F.text.regexp(r'^\s*!?суперпуперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_superpuperunreg)
-        
+        self.router.message(
+            F.text.regexp(r"^\s*!?суперпуперанрег(\s|$)", flags=re.IGNORECASE)
+        )(self.cmd_superpuperunreg)
+
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r'^\s*!?рег(\s|$)', flags=re.IGNORECASE))(self.cmd_reg)
-        
+        self.router.message(F.text.regexp(r"^\s*!?рег(\s|$)", flags=re.IGNORECASE))(
+            self.cmd_reg
+        )
+
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
-        self.router.message(F.text.regexp(r'^\s*!?ганрег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_unreg)
-        
+        self.router.message(F.text.regexp(r"^\s*!?ганрег(\s|$)", flags=re.IGNORECASE))(
+            self.cmd_global_unreg
+        )
+
         self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
-        self.router.message(F.text.regexp(r'^\s*!?гсуперанрег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_superunreg)
-        
+        self.router.message(
+            F.text.regexp(r"^\s*!?гсуперанрег(\s|$)", flags=re.IGNORECASE)
+        )(self.cmd_global_superunreg)
+
         self.router.message(Command("greg"))(self.cmd_global_reg)
-        self.router.message(F.text.regexp(r'^\s*!?грег(\s|$)', flags=re.IGNORECASE))(self.cmd_global_reg)
-        
+        self.router.message(F.text.regexp(r"^\s*!?грег(\s|$)", flags=re.IGNORECASE))(
+            self.cmd_global_reg
+        )
+
         # Premium
         # Premium
         self.router.message(Command("balance"))(self.cmd_balance)
         self.router.message(Command("spanreg"))(self.cmd_superunreg)
 
         # v2.6.5: Слідкуємо за виходом учасників (Real-time cleanup)
-        from aiogram.filters import ChatMemberUpdatedFilter, LEFT, KICKED, MEMBER, ADMINISTRATOR
+        from aiogram.filters import (
+            ChatMemberUpdatedFilter,
+            LEFT,
+            KICKED,
+            MEMBER,
+            ADMINISTRATOR,
+            RESTRICTED,
+        )
+
         self.router.chat_member(
             ChatMemberUpdatedFilter(member_status_changed=(LEFT | KICKED))
         )(self.on_user_left)
-        
+
         self.router.chat_member(
-            ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
+            ChatMemberUpdatedFilter(
+                member_status_changed=(MEMBER | ADMINISTRATOR | RESTRICTED)
+            )
         )(self.on_user_join)
-        
+
         # v2.7.5: Personal Emoji
         self.router.message(Command("setemoji"))(self.cmd_set_emoji)
         self.router.message(F.text.startswith("!setemoji"))(self.cmd_set_emoji)
-    
+
     async def on_user_join(self, event: ChatMemberUpdated):
         """Додає користувача в базу, коли він входить в чат"""
         if event.new_chat_member.user.is_bot:
             return
-            
+
         chat_id = get_clean_chat_id(event.chat.id)
         user = event.new_chat_member.user
         user_id = str(user.id)
-        
+
         name = get_user_name(
             first_name=user.first_name,
             last_name=user.last_name,
             username=user.username,
-            user_id=user.id
+            user_id=user.id,
         )
-        
+
         # Додаємо в базу як "пасивного" учасника (не знімаємо анрег, якщо він був)
         self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
-        self.logger.info(f"Real-time Join: Користувач {user_id} приєднався до {chat_id}")
+        self.logger.info(
+            f"Real-time Join: Користувач {user_id} приєднався до {chat_id}"
+        )
 
     async def on_user_left(self, event: ChatMemberUpdated):
         """Видаляє користувача з бази, коли він виходить з чату"""
         chat_id = get_clean_chat_id(event.chat.id)
         user_id = str(event.old_chat_member.user.id)
-        
+
         self.chat_repo.remove_user(chat_id, user_id)
         self.logger.info(f"Real-time Cleanup: Користувач {user_id} вийшов з {chat_id}")
-    
+
     async def cmd_start(self, message: Message):
-        """Обробляє /start з реферальними посиланнями"""
-        from config import REFERRAL_BONUS_SIGNUP
-        
-        # Перевіряємо чи є реферальний код
+        """Обробляє команду /start та реферальні посилання"""
+        from config import REFERRAL_BONUS_SIGNUP, PROJECTS_CHANNEL
+
+        # 1. Перевірка реферального коду
         args = message.text.split()
         if len(args) > 1 and args[1].startswith("ref_"):
             referrer_id = args[1].replace("ref_", "")
             referred_id = str(message.from_user.id)
-            
-            # Не можна реферити самого себе
-            if referrer_id == referred_id:
-                await self.cmd_help(message)
-                return
-            
-            # Відстежуємо реферала
-            from core import ReferralRepository
-            from core.database import JSONDatabase
-            from config import DB_FILE
-            
-            db = JSONDatabase(DB_FILE)
-            referral_repo = ReferralRepository(db)
-            
-            if referral_repo.track_referral(referrer_id, referred_id):
-                # Нараховуємо бонус рефереру
-                from core import PremiumRepository
-                premium_repo = PremiumRepository(db)
-                premium_repo.grant_premium(referrer_id, REFERRAL_BONUS_SIGNUP)
-                referral_repo.add_bonus_days(referrer_id, REFERRAL_BONUS_SIGNUP)
-                
-                # Повідомляємо нового користувача
-                await message.answer(
-                    f"🎉 <b>Вітаємо!</b>\n\n"
-                    f"Ви приєдналися за реферальним посиланням!\n"
-                    f"Ваш друг отримав +{REFERRAL_BONUS_SIGNUP} днів Premium 🎁\n\n"
-                    f"Купіть Premium і він отримає ще більше бонусів!\n"
-                    f"/premium",
-                    parse_mode="HTML"
-                )
-                
-                # Повідомляємо реферера
-                try:
-                    await message.bot.send_message(
-                        int(referrer_id),
-                        f"🎁 <b>Новий реферал!</b>\n\n"
-                        f"👤 {message.from_user.first_name} приєднався за вашим посиланням!\n"
-                        f"💎 Ви отримали +{REFERRAL_BONUS_SIGNUP} днів Premium\n\n"
-                        f"<i>Продовжуйте ділитися посиланням!</i>",
-                        parse_mode="HTML"
+
+            if referrer_id != referred_id:
+                from core import ReferralRepository
+                from core.database import JSONDatabase
+                from config import DB_FILE
+
+                db = JSONDatabase(DB_FILE)
+                referral_repo = ReferralRepository(db)
+
+                if referral_repo.track_referral(referrer_id, referred_id):
+                    from core import PremiumRepository
+
+                    premium_repo = PremiumRepository(db)
+                    premium_repo.grant_premium(referrer_id, REFERRAL_BONUS_SIGNUP)
+                    referral_repo.add_bonus_days(referrer_id, REFERRAL_BONUS_SIGNUP)
+
+                    # Повідомляємо реферера
+                    try:
+                        await message.bot.send_message(
+                            int(referrer_id),
+                            f"🎁 <b>Новий реферал!</b>\n\n"
+                            f"👤 {message.from_user.first_name} приєднався за вашим посиланням!\n"
+                            f"💎 Ви отримали +{REFERRAL_BONUS_SIGNUP} днів Premium\n\n"
+                            f"<i>Продовжуйте ділитися посиланням!</i>",
+                            parse_mode="HTML",
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to notify referrer: {e}")
+
+                    await message.answer(
+                        f"🎉 <b>Вітаємо!</b>\n\n"
+                        f"Ви приєдналися за реферальним посиланням!\n"
+                        f"Ваш друг отримав +{REFERRAL_BONUS_SIGNUP} днів Premium 🎁\n\n"
+                        f"Купіть Premium і він отримає ще більше бонусів!\n"
+                        f"/premium",
+                        parse_mode="HTML",
                     )
-                except Exception as e:
-                    self.logger.warning(f"Failed to notify referrer: {e}")
-                
-                return
-        
-        # Якщо немає реферального коду - показуємо help
-        await self.cmd_help(message)
-    
+                    return
+
+        # 2. Стандартне привітання (якщо не був реферал або вже оброблено)
+        start_text = (
+            "👋 <b>Вітаю! Ping Bot готовий до роботи!</b>\n\n"
+            "📋 <b>Швидкий старт:</b>\n"
+            "1️⃣ Зробіть мене <b>адміністратором</b> (для доступу до повідомлень)\n"
+            "2️⃣ Виконайте /sync для синхронізації учасників (якщо потрібно)\n"
+            "3️⃣ Готово! Тепер можна використовувати /all, /anybody та інші команди\n\n"
+            "✨ <b>Real-time Tracking:</b> Бот автоматично бачить кожного, хто пише або заходить у чат. "
+            "Юзербот потрібен тільки для швидкого збору тих, хто ще не проявив активність.\n\n"
+            "Всі команди: /help"
+        )
+        sent = await message.answer(start_text, parse_mode="HTML")
+        await self.auto_cleanup(message, sent, custom_delay=60)
+
     async def cmd_help(self, message: Message):
         """Показує головне меню довідки"""
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📢 Пінги", callback_data="help_pings"),
-                InlineKeyboardButton(text="🎯 Тригери", callback_data="help_triggers")
-            ],
-            [
-                InlineKeyboardButton(text="🎮 Панель ролей", callback_data="help_roles"),
-                InlineKeyboardButton(text="📝 Шаблони", callback_data="help_templates")
-            ],
-            [
-                InlineKeyboardButton(text="⚙️ Керування", callback_data="help_management"),
-                InlineKeyboardButton(text="👑 Premium", callback_data="help_premium")
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="📢 Пінги", callback_data="help_pings"),
+                    InlineKeyboardButton(
+                        text="🎯 Тригери", callback_data="help_triggers"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🎮 Панель ролей", callback_data="help_roles"
+                    ),
+                    InlineKeyboardButton(
+                        text="📝 Шаблони", callback_data="help_templates"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⚙️ Керування", callback_data="help_management"
+                    ),
+                    InlineKeyboardButton(
+                        text="👑 Premium", callback_data="help_premium"
+                    ),
+                ],
             ]
-        ])
-        
+        )
+
         # v2.7.5: Personal Emoji in Profile
-        personal_emoji = self.chat_repo.get_user_setting(message.from_user.id, "personal_emoji", "")
+        personal_emoji = self.chat_repo.get_user_setting(
+            message.from_user.id, "personal_emoji", ""
+        )
         profile_header = f"{personal_emoji} " if personal_emoji else ""
-        
+
         help_text = (
             f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
             "Оберіть розділ для детальної інформації.\n\n"
@@ -209,8 +272,13 @@ class UserHandler(BaseHandler):
             "🛡 Alias: /spanreg = /superunreg\n"
             f"📢 Проекти: <a href='{PROJECTS_CHANNEL}'>Канал</a>"
         )
-        
-        sent = await message.answer(help_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+
+        sent = await message.answer(
+            help_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
         await self.auto_cleanup(message, sent)
 
     async def handle_user_activity(self, message: Message):
@@ -218,72 +286,103 @@ class UserHandler(BaseHandler):
         # Тільки для груп
         if not message.chat or message.chat.type not in ["group", "supergroup"]:
             return
-            
+
         # Ігноруємо ботів
         if message.from_user and message.from_user.is_bot:
             return
-            
+
         text = message.text or message.caption or ""
         # Якщо це команда або тригер - ігноруємо (вони обробляються окремо і не знімають анрег)
-        if text.startswith(('/', '!')):
+        if text.startswith(("/", "!")):
             return
-        
+
         # v2.6.3: Перевіряємо слова-команди без префіксів (анрег, рег, всі і т.д.)
         word_commands = [
-            'анрег', 'рег', 'суперанрег', 'ганрег', 'гсуперанрег', 'грег',
-            'всі', 'хтось', 'стата', 'фулстата', 'стоп', 
-            'unreg', 'reg', 'superunreg', 'gunreg', 'gsuperunreg', 'greg',
-            'all', 'stats', 'fullstats', 'stop', 'help',
-            'адміни', 'admins', 'збір', 'sync', 'преміум', 'premium'
+            "анрег",
+            "рег",
+            "суперанрег",
+            "ганрег",
+            "гсуперанрег",
+            "грег",
+            "всі",
+            "хтось",
+            "стата",
+            "фулстата",
+            "стоп",
+            "unreg",
+            "reg",
+            "superunreg",
+            "gunreg",
+            "gsuperunreg",
+            "greg",
+            "all",
+            "stats",
+            "fullstats",
+            "stop",
+            "help",
+            "адміни",
+            "admins",
+            "збір",
+            "sync",
+            "преміум",
+            "premium",
         ]
         first_word = text.strip().lower().split()[0] if text.strip() else ""
         if first_word in word_commands:
             return
-            
+
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
         name = get_user_name(
             first_name=message.from_user.first_name,
             last_name=message.from_user.last_name,
             username=message.from_user.username,
-            user_id=message.from_user.id
+            user_id=message.from_user.id,
         )
-        
+
         # Оновлюємо ім'я та знімаємо тимчасовий анрег
         self.chat_repo.save_user(chat_id, user_id, name, update_unreg=True)
-    
+
     async def callback_help_section(self, callback: CallbackQuery):
         """Обробляє вибір розділу довідки"""
         section = callback.data.replace("help_", "")
-        self.logger.info(f"Help section requested: {section} by {callback.from_user.id}")
+        self.logger.info(
+            f"Help section requested: {section} by {callback.from_user.id}"
+        )
 
         async def safe_edit_text(text, reply_markup=None, **kwargs):
             for i in range(3):
                 try:
-                    await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML", **kwargs)
+                    await callback.message.edit_text(
+                        text, reply_markup=reply_markup, parse_mode="HTML", **kwargs
+                    )
                     return
                 except TelegramServerError:
                     await asyncio.sleep(0.5)
                 except TelegramBadRequest as e:
-                    if "message is not modified" in str(e): return
+                    if "message is not modified" in str(e):
+                        return
                     raise e
 
-        
         try:
             await callback.answer()
         except:
             pass
-        
+
         # Кнопка "Назад"
-        back_button = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="help_main")]
-        ])
-        
+        back_button = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="help_main")]
+            ]
+        )
+
         try:
             if section == "main":
-                personal_emoji = self.chat_repo.get_user_setting(callback.from_user.id, "personal_emoji", "")
+                personal_emoji = self.chat_repo.get_user_setting(
+                    callback.from_user.id, "personal_emoji", ""
+                )
                 profile_header = f"{personal_emoji} " if personal_emoji else ""
-                
+
                 help_text = (
                     f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
                     "Оберіть розділ для детальної інформації.\n\n"
@@ -300,23 +399,37 @@ class UserHandler(BaseHandler):
                 )
                 await safe_edit_text(
                     help_text,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [
-                            InlineKeyboardButton(text="📢 Пінги", callback_data="help_pings"),
-                            InlineKeyboardButton(text="🎯 Тригери", callback_data="help_triggers")
-                        ],
-                        [
-                            InlineKeyboardButton(text="🎮 Панель ролей", callback_data="help_roles"),
-                            InlineKeyboardButton(text="📝 Шаблони", callback_data="help_templates")
-                        ],
-                        [
-                            InlineKeyboardButton(text="⚙️ Керування", callback_data="help_management"),
-                            InlineKeyboardButton(text="👑 Premium", callback_data="help_premium")
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="📢 Пінги", callback_data="help_pings"
+                                ),
+                                InlineKeyboardButton(
+                                    text="🎯 Тригери", callback_data="help_triggers"
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text="🎮 Панель ролей", callback_data="help_roles"
+                                ),
+                                InlineKeyboardButton(
+                                    text="📝 Шаблони", callback_data="help_templates"
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text="⚙️ Керування", callback_data="help_management"
+                                ),
+                                InlineKeyboardButton(
+                                    text="👑 Premium", callback_data="help_premium"
+                                ),
+                            ],
                         ]
-                    ]),
-                    disable_web_page_preview=True
+                    ),
+                    disable_web_page_preview=True,
                 )
-            
+
             elif section == "pings":
                 text = (
                     "<b>📢 Пінги</b>\n\n"
@@ -337,7 +450,7 @@ class UserHandler(BaseHandler):
                     "• <code>!стоп</code> — Зупинити поточний виклик"
                 )
                 await safe_edit_text(text, reply_markup=back_button)
-            
+
             elif section == "triggers":
                 text = (
                     "<b>🎯 Тригери викликів</b>\n\n"
@@ -357,7 +470,7 @@ class UserHandler(BaseHandler):
                     "• <code>!deltrigger слово</code> — Видалити слово-виклик"
                 )
                 await safe_edit_text(text, reply_markup=back_button)
-            
+
             elif section == "roles":
                 text = (
                     "<b>🎮 Панель самореєстрації</b>\n\n"
@@ -375,7 +488,7 @@ class UserHandler(BaseHandler):
                     "<i>Як в Discord! 🎯</i>"
                 )
                 await safe_edit_text(text, reply_markup=back_button)
-            
+
             elif section == "templates":
                 text = (
                     "<b>📝 Шаблони викликів</b>\n\n"
@@ -387,17 +500,17 @@ class UserHandler(BaseHandler):
                     "<b>Використання:</b>\n"
                     "• <code>/all назва_шаблону</code> — Викликати з текстом\n\n"
                     "<b>Приклад:</b>\n"
-                    "1. Напишіть: \"Збори о 18:00\"\n"
+                    '1. Напишіть: "Збори о 18:00"\n'
                     "2. Відповідайте: <code>!addcpattern meeting</code>\n"
                     "3. Використайте: <code>/all meeting</code>"
                 )
                 await safe_edit_text(text, reply_markup=back_button)
-            
+
             elif section == "management":
                 is_super = callback.from_user.id == ADMIN_USER_ID
                 is_owner = self.chat_repo.is_owner(callback.from_user.id)
                 is_admin = self.chat_repo.is_bot_admin(callback.from_user.id)
-                
+
                 text = (
                     "<b>⚙️ Керування</b>\n\n"
                     "<b>Адмін-панель:</b>\n"
@@ -407,7 +520,7 @@ class UserHandler(BaseHandler):
                     "• <code>!стата</code> або /stats — Статистика чату\n"
                     "• <code>!адміни</code> — Пінганути всіх адмінів\n"
                 )
-                
+
                 if is_admin or is_owner or is_super:
                     text += (
                         "\n<b>👑 Адмін-команди (Owner Only):</b>\n"
@@ -416,7 +529,7 @@ class UserHandler(BaseHandler):
                         "• /admin_toggle_userbot — ВКЛ/ВИКЛ юзербот\n"
                         "• /admin_list — Весь склад персоналу\n"
                     )
-                    
+
                 if is_owner or is_super:
                     text += (
                         "\n<b>💎 Premium команди:</b>\n"
@@ -425,7 +538,7 @@ class UserHandler(BaseHandler):
                         "• /admin_grant_chat_premium chat_id days\n"
                         "• /chat_unreg — Анрег всього чату\n"
                     )
-                    
+
                 if is_super:
                     text += (
                         "\n<b>⭐️ SuperOwner Only:</b>\n"
@@ -433,21 +546,25 @@ class UserHandler(BaseHandler):
                         "• /owner_del [ID] — Видалити власника\n"
                         "• /mod_add [ID] — Додати модератора\n"
                     )
-                
+
                 # Додаємо кнопку налаштувань прямо сюди для зручності
                 mgmt_kb = [
-                    [InlineKeyboardButton(text="⚙️ Налаштування чату", callback_data="settings_location_chat_0_0")],
-                    [InlineKeyboardButton(text="◀️ Назад", callback_data="help_main")]
+                    [
+                        InlineKeyboardButton(
+                            text="⚙️ Налаштування чату",
+                            callback_data="settings_location_chat_0_0",
+                        )
+                    ],
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="help_main")],
                 ]
                 # Ховаємо кнопку налаштувань в ЛС, бо вона там не працює
                 if callback.message.chat.type == "private":
                     mgmt_kb.pop(0)
 
                 await safe_edit_text(
-                    text, 
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=mgmt_kb)
+                    text, reply_markup=InlineKeyboardMarkup(inline_keyboard=mgmt_kb)
                 )
-            
+
             elif section == "premium":
                 text = (
                     f"<b>👑 Premium</b>\n\n"
@@ -487,7 +604,6 @@ class UserHandler(BaseHandler):
             else:
                 raise e
 
-    
     async def cmd_feedback(self, message: Message):
         """Показує контакти для зворотного зв'язку"""
         feedback_text = (
@@ -498,17 +614,19 @@ class UserHandler(BaseHandler):
             f"<a href='{PROJECTS_CHANNEL}'>Telegram канал</a>\n\n"
             "<i>Ми завжди раді вашому фідбеку! 🙏</i>"
         )
-        sent = await message.answer(feedback_text, parse_mode="HTML", disable_web_page_preview=True)
+        sent = await message.answer(
+            feedback_text, parse_mode="HTML", disable_web_page_preview=True
+        )
         await self.auto_cleanup(message, sent)
-    
+
     async def cmd_unreg(self, message: Message):
         """Тимчасово вимикає пінги з можливістю авто-видалення та цитатою"""
         if message.chat.type not in ["group", "supergroup"]:
             return
-            
+
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
-        
+
         # Check if unreg is allowed in this chat
         allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
         if not allow_unreg:
@@ -518,68 +636,71 @@ class UserHandler(BaseHandler):
                     "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
                     "У цьому чаті не можна відключати сповіщення."
                 )
-            sent = await self._safe_answer(
-                message, 
-                denied_msg,
-                parse_mode="HTML"
-            )
+            sent = await self._safe_answer(message, denied_msg, parse_mode="HTML")
             await self.auto_cleanup(message, sent)
             try:
                 await message.delete()
             except:
                 pass
             return
-        
+
         # Check for quote
         quote = None
         args = message.text.split(maxsplit=1)
         if len(args) > 1:
             quote = args[1].strip()
-            
+
         # Logic for quote permissions
         if quote:
-            quote_mode = self.chat_repo.get_global_setting("unreg_quote_mode", "premium") # 'all' or 'premium'
+            quote_mode = self.chat_repo.get_global_setting(
+                "unreg_quote_mode", "premium"
+            )  # 'all' or 'premium'
             has_premium = self.premium_repo.has_premium(user_id)
-            
+
             # Якщо режим "premium" і у юзера немає преміум
             if quote_mode == "premium" and not has_premium:
                 sent = await self._safe_answer(
-                    message, 
+                    message,
                     "💎 <b>Premium Feature</b>\n\n"
                     "Залишати повідомлення при анрегу можуть тільки Premium користувачів.\n"
                     "Власник бота може змінити це в налаштуваннях.",
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
                 await self.auto_cleanup(message, sent)
                 return
 
-        self.logger.info(f"Команда анрег від {user_id} у чаті {chat_id} (quote={bool(quote)})")
-        
+        self.logger.info(
+            f"Команда анрег від {user_id} у чаті {chat_id} (quote={bool(quote)})"
+        )
+
         added = self.chat_repo.add_to_temp_unreg(chat_id, user_id)
-        
+
         # Debug: verify it was actually saved
         chat_data = self.chat_repo.get_chat_data(chat_id)
         current_temp = chat_data.get("temp_unreg", [])
         self.logger.info(f"[UNREG DEBUG] added={added}, temp_unreg now: {current_temp}")
-        
+
         if added:
             if quote:
                 name = get_user_name(
-                    message.from_user.first_name, 
-                    message.from_user.last_name, 
-                    message.from_user.username, 
-                    message.from_user.id
+                    message.from_user.first_name,
+                    message.from_user.last_name,
+                    message.from_user.username,
+                    message.from_user.id,
                 )
                 # Escaping quote to prevent HTML injection
                 from html import escape
+
                 safe_quote = escape(quote)
-                
+
                 text = f"🔕 <b>{name}</b> анрегнувся зі словами:\n<i>{safe_quote}</i>"
                 sent = await message.answer(text, parse_mode="HTML")
-                
+
                 # Check chat setting for cleanup (default: False - keep quote)
-                cleanup_quote = self.chat_repo.get_setting(chat_id, "cleanup_unreg_quote", False)
-                
+                cleanup_quote = self.chat_repo.get_setting(
+                    chat_id, "cleanup_unreg_quote", False
+                )
+
                 if cleanup_quote:
                     await self.auto_cleanup(message, sent)
                 else:
@@ -590,20 +711,22 @@ class UserHandler(BaseHandler):
                         pass
             else:
                 sent = await self._safe_answer(
-                    message, 
-                    "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад."
+                    message,
+                    "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад.",
                 )
                 await self.auto_cleanup(message, sent)
         else:
-            sent = await self._safe_answer(message, "ℹ️ Ви вже в режимі тимчасового анрегу.")
+            sent = await self._safe_answer(
+                message, "ℹ️ Ви вже в режимі тимчасового анрегу."
+            )
             await self.auto_cleanup(message, sent)
-    
+
     async def cmd_superunreg(self, message: Message):
         """Постійно вимикає пінги (Premium або Chat Premium)"""
         user_id = str(message.from_user.id)
         chat_id = get_clean_chat_id(message.chat.id)
         self.logger.info(f"Команда SUPERUNREG від {user_id} у чаті {chat_id}")
-        
+
         # Check if unreg is allowed in this chat
         allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
         if not allow_unreg:
@@ -613,11 +736,7 @@ class UserHandler(BaseHandler):
                     "🚫 <b>Анрег вимкнено адміністратором чату.</b>\n"
                     "У цьому чаті не можна використовувати SuperUnreg."
                 )
-            sent = await self._safe_answer(
-                message, 
-                denied_msg,
-                parse_mode="HTML"
-            )
+            sent = await self._safe_answer(message, denied_msg, parse_mode="HTML")
             await self.auto_cleanup(message, sent)
             try:
                 await message.delete()
@@ -627,15 +746,16 @@ class UserHandler(BaseHandler):
 
         # Перевірка: Personal Premium АБО Chat Premium
         has_personal = self.premium_repo.has_premium(user_id)
-        
+
         # Check Chat Premium
         from core import ChatPremiumRepository
         from core.database import JSONDatabase
         from config import DB_FILE
+
         db = JSONDatabase(DB_FILE)
         chat_premium_repo = ChatPremiumRepository(db)
         has_chat_premium = chat_premium_repo.has_chat_premium(chat_id)
-        
+
         if not has_personal and not has_chat_premium:
             sent = await message.answer(
                 "👑 <b>PREMIUM REQUIRED</b>\n\n"
@@ -644,34 +764,36 @@ class UserHandler(BaseHandler):
                 "• Personal Premium: /premium\n"
                 "• Chat Premium: попросіть адміна чату\n\n"
                 "<i>Chat Premium дозволяє SuperUnreg для всіх в чаті!</i>",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await self.auto_cleanup(message, sent, custom_delay=30)
             return
-        
+
         added = self.chat_repo.add_to_super_unreg(chat_id, user_id)
-        
+
         if added:
             sent = await message.answer(
                 "🛡 <b>SUPER UNREG: АКТИВОВАНО</b>\n\n"
                 "💎 Ви успішно використали свій <b>Premium</b> статус. Тепер учасники не зможуть пінгнути вас у цьому чаті, навіть якщо ви будете активні.\n\n"
                 "<i>Повернутися: /reg</i>",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         else:
-            sent = await message.answer("ℹ️ <b>Ви вже захищені SuperUnreg у цьому чаті.</b>", parse_mode="HTML")
-        
+            sent = await message.answer(
+                "ℹ️ <b>Ви вже захищені SuperUnreg у цьому чаті.</b>", parse_mode="HTML"
+            )
+
         # SuperUnreg повідомлення висять довше (60с), щоб всі бачили статус
         await self.auto_cleanup(message, sent, custom_delay=60)
-    
+
     async def cmd_superpuperunreg(self, message: Message):
         """Супер-Пупер Анрег: Те саме, що SuperUnreg, але з перевіркою прав"""
         if message.chat.type not in ["group", "supergroup"]:
             return
-            
+
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
-        
+
         # Перевірка налаштування allow_unreg
         allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
         if not allow_unreg:
@@ -679,11 +801,7 @@ class UserHandler(BaseHandler):
             if not denied_msg:
                 denied_msg = "🚫 <b>Анрег вимкнено адміністратором чату.</b>\nУ цьому чаті не можна відключати сповіщення."
 
-            sent = await self._safe_answer(
-                message, 
-                denied_msg,
-                parse_mode="HTML"
-            )
+            sent = await self._safe_answer(message, denied_msg, parse_mode="HTML")
             await self.auto_cleanup(message, sent)
             return
 
@@ -692,10 +810,11 @@ class UserHandler(BaseHandler):
         from core import ChatPremiumRepository
         from core.database import JSONDatabase
         from config import DB_FILE
+
         db = JSONDatabase(DB_FILE)
         chat_premium_repo = ChatPremiumRepository(db)
         has_chat_premium = chat_premium_repo.has_chat_premium(chat_id)
-        
+
         if not has_personal and not has_chat_premium:
             sent = await message.answer(
                 "👑 <b>PREMIUM REQUIRED</b>\n\n"
@@ -703,21 +822,23 @@ class UserHandler(BaseHandler):
                 "✨ <b>Як отримати:</b>\n"
                 "• Personal Premium: /premium\n"
                 "• Chat Premium: попросіть адміна чату",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await self.auto_cleanup(message, sent, custom_delay=30)
             return
-            
+
         added = self.chat_repo.add_to_super_puper_unreg(chat_id, user_id)
-        
+
         if added:
             # Перевірка прав бота на видалення (для Mention Protection)
             try:
-                bot_member = await message.bot.get_chat_member(message.chat.id, message.bot.id)
-                can_delete = getattr(bot_member, 'can_delete_messages', True)
+                bot_member = await message.bot.get_chat_member(
+                    message.chat.id, message.bot.id
+                )
+                can_delete = getattr(bot_member, "can_delete_messages", True)
             except:
                 can_delete = True
-                
+
             warning_text = ""
             if not can_delete:
                 warning_text = (
@@ -729,38 +850,42 @@ class UserHandler(BaseHandler):
                 f"🛡 <b>SUPER PUPER UNREG: АКТИВОВАНО</b>\n\n"
                 f"💎 Ви успішно використали свій <b>Premium</b> статус. Тепер учасники не зможуть пінгнути вас у цьому чаті, навіть якщо ви будете активні.\n"
                 f"<i>Повернутися: /reg</i>{warning_text}",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         else:
-            sent = await message.answer("ℹ️ <b>Ви вже захищені SuperPuperUnreg у цьому чаті.</b>", parse_mode="HTML")
-        
+            sent = await message.answer(
+                "ℹ️ <b>Ви вже захищені SuperPuperUnreg у цьому чаті.</b>",
+                parse_mode="HTML",
+            )
+
         await self.auto_cleanup(message, sent, custom_delay=60)
-    
+
     async def cmd_reg(self, message: Message):
         """Увімкнює пінги назад"""
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
-        
+
         removed = self.chat_repo.remove_from_unreg(chat_id, user_id)
-        
+
         if removed:
             sent = await message.answer(
                 "✅ Пінги увімкнено! Тепер ви знову отримуватимете сповіщення."
             )
         else:
             sent = await message.answer("ℹ️ Ви і так отримуєте пінги.")
-        
+
         await self.auto_cleanup(message, sent)
-    
+
     async def cmd_balance(self, message: Message):
         """Показує статус преміуму"""
         user_id = str(message.from_user.id)
-        
+
         if self.premium_repo.has_premium(user_id):
             expiry = self.premium_repo.get_expiry(user_id)
             from datetime import datetime
+
             days_left = (expiry - datetime.now()).days
-            
+
             balance_text = (
                 "👑 <b>Ваш Premium статус</b>\n\n"
                 f"✅ Активний до: {expiry.strftime('%d.%m.%Y')}\n"
@@ -768,90 +893,58 @@ class UserHandler(BaseHandler):
                 "Продовжити: /premium"
             )
         else:
-            balance_text = (
-                "❌ <b>У вас немає Premium</b>\n\n"
-                "Купити Premium: /premium"
-            )
-        
+            balance_text = "❌ <b>У вас немає Premium</b>\n\nКупити Premium: /premium"
+
         sent = await message.answer(balance_text, parse_mode="HTML")
         await self.auto_cleanup(message, sent)
-
-    async def cmd_start(self, message: Message):
-        """Обробляє команду /start"""
-        # Перевіряємо чи це реферальне посилання
-        args = message.text.split()
-        if len(args) > 1:
-            referrer_id = args[1]
-            # Якщо це не ми самі (захист від накрутки)
-            if referrer_id != str(message.from_user.id):
-                await self._handle_referral(message, referrer_id, str(message.from_user.id))
-                return
-
-        start_text = (
-            "👋 <b>Вітаю! Ping Bot готовий до роботи!</b>\n\n"
-            "📋 <b>Швидкий старт:</b>\n"
-            "1️⃣ Зробіть мене <b>адміністратором</b> (для доступу до повідомлень)\n"
-            "2️⃣ Виконайте /sync для синхронізації учасників\n"
-            "3️⃣ Готово! Тепер можна використовувати /all, /anybody та інші команди\n\n"
-            "💡 <i>Синхронізація відбувається автоматично щоночі о 03:00.</i>\n\n"
-            "❓ <b>Важливо про синхронізацію:</b>\n"
-            "Щоб бот міг бачити <b>всіх</b> учасників (а не тільки тих, хто пише), "
-            "потрібно додати нашого технічного адміністратора:\n"
-            "👉 @you_can_try_this\n\n"
-            "<i>Він допоможе зібрати повну базу користувачів для коректної роботи команд. "
-            "Бот ніколи не турбуватиме вас без команди.</i>\n\n"
-            "Всі команди: /help"
-        )
-        sent = await message.answer(start_text, parse_mode="HTML")
-        await self.auto_cleanup(message, sent, custom_delay=60)
 
     # === Global Unreg Logic ===
 
     async def cmd_global_unreg(self, message: Message):
         """Вимкнення пінгів у всіх чатах відразу"""
         user_id = str(message.from_user.id)
-        
+
         self.chat_repo.add_to_global_unreg(user_id, is_super=False)
-        
+
         sent = await message.answer(
             "🌍 <b>Глобальний анрег активовано</b>\n\n"
             "Пінги вимкнені у <b>всіх чатах</b> з ботом.\n"
             "<i>Автоувімкнення при наступному повідомленні</i>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await self.auto_cleanup(message, sent)
 
     async def cmd_global_superunreg(self, message: Message):
         """Постійне вимкнення пінгів у всіх чатах (Premium)"""
         user_id = str(message.from_user.id)
-        
+
         if not self.premium_repo.has_premium(user_id):
             sent = await message.answer(
                 "👑 <b>GLOBAL PREMIUM FEATURE</b>\n\n"
                 "<b>Глобальний SuperUnreg</b> — це ультимативне рішення. Ви зникаєте з усіх пінгувань у всіх чатах одночасно.\n\n"
                 "💎 Придбати доступ: /premium",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await self.auto_cleanup(message, sent, custom_delay=30)
             return
 
         self.chat_repo.add_to_global_unreg(user_id, is_super=True)
-        
+
         sent = await message.answer(
             "🌌 <b>GLOBAL SUPER UNREG</b>\n\n"
             "✨ <b>Статус: УЛЬТИМАТИВНИЙ ЗАХИСТ</b>\n"
             "Ви повністю приховані від усіх типів пінгування (all, active, writers тощо) в усіх чатах, де присутній бот.\n\n"
             "<i>Зняти захист: /greg</i>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await self.auto_cleanup(message, sent, custom_delay=60)
 
     async def cmd_global_reg(self, message: Message):
         """Увімкнення пінгів у всіх чатах відразу"""
         user_id = str(message.from_user.id)
-        
+
         removed = self.chat_repo.remove_from_global_unreg(user_id)
-        
+
         if removed:
             sent = await message.answer(
                 "🔔 <b>Глобальні пінги увімкнено!</b>\n\n"
@@ -859,7 +952,7 @@ class UserHandler(BaseHandler):
             )
         else:
             sent = await message.answer("ℹ️ Ви і так отримували глобальні пінги.")
-        
+
         await self.auto_cleanup(message, sent)
 
     async def on_bot_join(self, event: ChatMemberUpdated):
@@ -868,19 +961,27 @@ class UserHandler(BaseHandler):
         Повідомляє власника про нову групу для перевірки юзербота.
         """
         # Перевіряємо чи це саме додавання (був left/kicked -> став member/admin)
-        if event.old_chat_member.status in ["left", "kicked", "restricted"] and \
-           event.new_chat_member.status in ["member", "administrator"]:
-            
+        if event.old_chat_member.status in [
+            "left",
+            "kicked",
+            "restricted",
+        ] and event.new_chat_member.status in ["member", "administrator"]:
             chat_title = event.chat.title or "Chat"
             chat_id = event.chat.id
             username = event.chat.username or "private"
-            
+
             added_by = event.from_user.first_name
-            added_by_username = f"@{event.from_user.username}" if event.from_user.username else str(event.from_user.id)
-            
+            added_by_username = (
+                f"@{event.from_user.username}"
+                if event.from_user.username
+                else str(event.from_user.id)
+            )
+
             # Логуємо
-            self.logger.info(f"🆕 Бот доданий в чат: {chat_title} ({chat_id}) користувачем {added_by}")
-            
+            self.logger.info(
+                f"🆕 Бот доданий в чат: {chat_title} ({chat_id}) користувачем {added_by}"
+            )
+
             # Повідомляємо власника
             try:
                 msg_text = (
@@ -900,27 +1001,36 @@ class UserHandler(BaseHandler):
     async def cmd_set_emoji(self, message: Message):
         """Встановлює персональний емодзі для профілю"""
         if message.chat.type != "private":
-            sent = await message.answer("⚠️ Цю команду можна використовувати тільки в <b>особистих повідомленнях</b> боту.")
+            sent = await message.answer(
+                "⚠️ Цю команду можна використовувати тільки в <b>особистих повідомленнях</b> боту."
+            )
             await self.auto_cleanup(message, sent)
             return
-            
+
         parts = message.text.split(maxsplit=1)
         if len(parts) < 2:
-            sent = await message.answer("ℹ️ Використання: <code>!setemoji 🍎</code>\nЩоб видалити: <code>!setemoji none</code>", parse_mode="HTML")
+            sent = await message.answer(
+                "ℹ️ Використання: <code>!setemoji 🍎</code>\nЩоб видалити: <code>!setemoji none</code>",
+                parse_mode="HTML",
+            )
             await self.auto_cleanup(message, sent)
             return
-            
+
         emoji = parts[1].strip()
-        
+
         if emoji.lower() == "none":
             self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", "")
             await message.answer("✅ Персональний емодзі видалено.")
             return
-            
+
         # Валідація: не більше 2 символів (для підтримки складних емодзі може бути більше, але обмежимо візуально)
-        if len(emoji) > 5: # Деякі складні емодзі займають більше ніж 1-2 char в utf-8
-            await message.answer("❌ Занадто довгий текст. Будь ласка, використовуйте один емодзі.")
+        if len(emoji) > 5:  # Деякі складні емодзі займають більше ніж 1-2 char в utf-8
+            await message.answer(
+                "❌ Занадто довгий текст. Будь ласка, використовуйте один емодзі."
+            )
             return
-            
+
         self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", emoji)
-        await message.answer(f"✅ Персональний емодзі встановлено: {emoji}\nТепер він буде відображатися в /help")
+        await message.answer(
+            f"✅ Персональний емодзі встановлено: {emoji}\nТепер він буде відображатися в /help"
+        )
