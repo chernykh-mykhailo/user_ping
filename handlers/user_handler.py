@@ -147,7 +147,9 @@ class UserHandler(BaseHandler):
         )
 
         # Додаємо в базу як "пасивного" учасника (не знімаємо анрег, якщо він був)
-        self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
+        self.chat_repo.save_user(
+            chat_id, user_id, name, update_unreg=False, username=user.username
+        )
         self.logger.info(
             f"Real-time Join: Користувач {user_id} приєднався до {chat_id}"
         )
@@ -341,7 +343,13 @@ class UserHandler(BaseHandler):
         )
 
         # Оновлюємо ім'я та знімаємо тимчасовий анрег
-        self.chat_repo.save_user(chat_id, user_id, name, update_unreg=True)
+        self.chat_repo.save_user(
+            chat_id,
+            user_id,
+            name,
+            update_unreg=True,
+            username=message.from_user.username,
+        )
 
     async def callback_help_section(self, callback: CallbackQuery):
         """Обробляє вибір розділу довідки"""

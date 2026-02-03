@@ -25,6 +25,7 @@ class UserActivityDomain:
         name: str,
         source: str = "message",
         profile_time: str = None,
+        username: str = None,
     ) -> None:
         """
         Saves user activity (DOES NOT handle unreg - that's UnregDomain's job)
@@ -64,6 +65,10 @@ class UserActivityDomain:
 
         if not isinstance(user_entry, dict):
             user_entry = {"name": safe_name[:20], "last_seen": "2000-01-01T00:00:00"}
+
+        # Update username if provided
+        if username:
+            user_entry["username"] = username
 
         # Logic split by source type
         if source == "message":
@@ -225,6 +230,71 @@ class UserActivityDomain:
         active_list.sort(key=lambda x: x[2], reverse=True)
 
         return {uid: name for uid, name, _ in active_list}
+
+    def get_active_users_full(self, chat_id: str) -> List[Dict]:
+        """
+        Returns active users with full data (name, username, etc)
+        """
+        from core.domains.users.unreg import UnregDomain
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        chat_data = self._get_chat_data(chat_id)
+        all_users_raw = chat_data.get("users", {})
+
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper = (
+            self._get_unreg_sets(chat_id)
+        )
+
+        # Filter unregs
+        active_list = []
+        now_dt = datetime.now()
+        ghost_threshold = now_dt - timedelta(days=30)
+
+        for uid, val in all_users_raw.items():
+            if (
+                uid in temp_unreg
+                or uid in super_unreg
+                or uid in global_unreg
+                or uid in global_super
+                or uid in super_puper
+            ):
+                continue
+
+            # Handle both old and new format
+            user_data = (
+                val
+                if isinstance(val, dict)
+                else {"name": val, "last_seen": "2000-01-01T00:00:00"}
+            )
+            name = user_data.get("name", "Unknown")
+
+            # Choose best timestamp
+            last_seen_str = user_data.get("last_seen", "2000-01-01T00:00:00")
+            profile_seen_str = user_data.get("profile_seen", "2000-01-01T00:00:00")
+
+            # Ghost Protection
+            try:
+                actual_seen_str = max(last_seen_str, profile_seen_str)
+                actual_seen_dt = datetime.fromisoformat(
+                    actual_seen_str.replace("+00:00", "").replace("Z", "")
+                )
+
+                if name.startswith("ID:") and actual_seen_dt < ghost_threshold:
+                    continue
+            except:
+                pass
+
+            # Prepare result object
+            result_item = user_data.copy()
+            result_item["id"] = uid
+            active_list.append((uid, result_item, actual_seen_str))
+
+        # Sort: freshest timestamps first
+        active_list.sort(key=lambda x: x[2], reverse=True)
+
+        return [item for _, item, _ in active_list]
 
     def get_filtered_users(
         self, chat_id: str, source: str = "both", hours: int = 24

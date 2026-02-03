@@ -51,7 +51,11 @@ class ActivityMiddleware(BaseMiddleware):
                                 user_id=member.id,
                             )
                             self.chat_repo.save_user(
-                                chat_id, str(member.id), member_name, update_unreg=False
+                                chat_id,
+                                str(member.id),
+                                member_name,
+                                update_unreg=False,
+                                username=member.username,
                             )
                             self.logger.info(
                                 f"Service Join: Користувач {member.id} доданий через сервісне повідомлення"
@@ -112,7 +116,11 @@ class ActivityMiddleware(BaseMiddleware):
                 should_update_unreg = not is_command
 
                 self.chat_repo.save_user(
-                    chat_id, user_id, name, update_unreg=should_update_unreg
+                    chat_id,
+                    user_id,
+                    name,
+                    update_unreg=should_update_unreg,
+                    username=event.from_user.username,
                 )
 
                 # Якщо був в анрегі і це не команда - сповіщаємо (якщо налаштування увімкнено)

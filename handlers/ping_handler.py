@@ -16,9 +16,8 @@ from aiogram.types import (
 )
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
-from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id
-from config import PING_LIMITS, EMOJIS
+
+from config import PING_LIMITS, EMOJIS, ADMIN_USER_ID
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
 from utils.image_utils import create_summary_image
 import os
@@ -139,11 +138,35 @@ class PingHandler(BaseHandler):
 
         # 3. Dynamic Triggers (Regex !word)
         # This catches !croco (Groups) AND !custom (Aliases)
+        self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
         self.router.message(F.text.regexp(r"^!(\w+)$", flags=0))(self.cmd_call_trigger)
 
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
         # Should be LAST
         self.router.message(F.text)(self.handle_custom_triggers)
+
+    async def cmd_allow_unreg(self, message: Message):
+        """Дозволяє використання команди /unreg в чаті (Chat Owner Only)"""
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+
+        is_owner = False
+        try:
+            member = await self.bot.get_chat_member(chat_id, user_id)
+            if member.status == "creator":
+                is_owner = True
+        except:
+            pass
+
+        is_bot_admin = str(user_id) == str(ADMIN_USER_ID)
+
+        if not is_owner and not is_bot_admin:
+            await message.reply("⚠️ Ця команда доступна тільки власнику чату.")
+            return
+
+        clean_chat_id = get_clean_chat_id(chat_id)
+        self.chat_repo.set_setting(clean_chat_id, "allow_unreg", True)
+        await message.reply("✅ Команду /unreg увімкнено для цього чату.")
 
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -476,7 +499,7 @@ class PingHandler(BaseHandler):
                 if is_first_chunk and pin_enabled:
                     try:
                         await self.bot.pin_chat_message(
-                            chat_id, sent_message.message_id
+                            chat_id, sent_message.message_id, disable_notification=True
                         )
                     except Exception as e:
                         self.logger.warning(f"Не вдалося закріпити повідомлення: {e}")

@@ -67,7 +67,9 @@ class UserbotCollector:
                     username=user.username,
                     user_id=user.id,
                 )
-                self.chat_repo.save_user(chat_id, str(user.id), name)
+                self.chat_repo.save_user(
+                    chat_id, str(user.id), name, username=user.username
+                )
 
     async def _on_new_message(self, event):
         """Відстежує повідомлення для оновлення активності"""
@@ -91,13 +93,23 @@ class UserbotCollector:
             if text.startswith(("/", "!")):
                 # For commands, we only update the name/last_seen but DON'T remove unreg
                 self.chat_repo.save_user(
-                    chat_id, user_id, name, source="message", update_unreg=False
+                    chat_id,
+                    user_id,
+                    name,
+                    source="message",
+                    update_unreg=False,
+                    username=getattr(sender, "username", None),
                 )
             elif not text.strip():
                 # v2.8.0: If message has no text (Sticker, GIF, etc) - update activity BUT KEEP UNREG
                 # This matches user expectation that "only writing text" breaks temp unreg
                 self.chat_repo.save_user(
-                    chat_id, user_id, name, source="message", update_unreg=False
+                    chat_id,
+                    user_id,
+                    name,
+                    source="message",
+                    update_unreg=False,
+                    username=getattr(sender, "username", None),
                 )
             else:
                 # v2.6.3: Check word commands without prefix (анрег, рег, всі і т.д.)
@@ -140,12 +152,22 @@ class UserbotCollector:
                 if first_word in word_commands:
                     # Word command - don't remove unreg
                     self.chat_repo.save_user(
-                        chat_id, user_id, name, source="message", update_unreg=False
+                        chat_id,
+                        user_id,
+                        name,
+                        source="message",
+                        update_unreg=False,
+                        username=getattr(sender, "username", None),
                     )
                 else:
                     # Normal message - update and clear temp unreg
                     self.chat_repo.save_user(
-                        chat_id, user_id, name, source="message", update_unreg=True
+                        chat_id,
+                        user_id,
+                        name,
+                        source="message",
+                        update_unreg=True,
+                        username=getattr(sender, "username", None),
                     )
 
     async def sync_participants(self, chat_id: int) -> int:
@@ -185,6 +207,7 @@ class UserbotCollector:
                     update_unreg=False,
                     source="profile",
                     profile_time=profile_time,
+                    username=user.username,
                 )
                 count += 1
 
