@@ -68,6 +68,9 @@ class PingHandler(BaseHandler):
         self.router.message(Command("stop", "stopcall"))(self.cmd_stop)
         self.router.message(F.text.regexp(r"^!?стоп", flags=0))(self.cmd_stop)
 
+        # Sticker Handler
+        self.router.message(Command("set_sticker"))(self.cmd_set_sticker)
+
         # Шаблони викликів
         self.router.message(F.text.regexp(r"^!cpatterns$", flags=0))(
             self.cmd_list_templates
@@ -141,9 +144,6 @@ class PingHandler(BaseHandler):
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
         # Should be LAST
         self.router.message(F.text)(self.handle_custom_triggers)
-
-        # Sticker Handler
-        self.router.message(Command("set_sticker"))(self.cmd_set_sticker)
 
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
