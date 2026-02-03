@@ -1,4 +1,5 @@
 import logging
+import os
 from PIL import Image, ImageDraw, ImageFont
 from typing import List
 
@@ -31,20 +32,32 @@ def create_summary_image(
 
             # Determine font size based on image size
             width, height = img.size
-            font_size = int(height / 15)  # Adaptive font size
+            font_size = int(height / 10)  # Larger font (was /15)
 
-            # Try to load a font
-            try:
-                # Windows default font
-                font = ImageFont.truetype("arial.ttf", font_size)
-            except IOError:
-                # Fallback to default
+            # Try to load a font with Cyrillic support
+            font_paths = [
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/segoeui.ttf",
+                "C:/Windows/Fonts/calibri.ttf",
+                "arial.ttf",
+            ]
+
+            font = None
+            for path in font_paths:
+                try:
+                    if os.path.exists(path):
+                        font = ImageFont.truetype(path, font_size)
+                        break
+                    elif path == "arial.ttf":  # Try system lookup for simple name
+                        font = ImageFont.truetype(path, font_size)
+                        break
+                except IOError:
+                    continue
+
+            if font is None:
+                # Fallback to default (likely won't support Cyrillic)
                 font = ImageFont.load_default()
-                logger.warning("Arial font not found, using default.")
-
-            # Calculate text position (centered)
-            # We want to place it in the center or bottom? User said "on the background".
-            # Let's add a semi-transparent black overlay to make text readable
+                logger.warning("No suitable font found, using default.")
 
             # Create overlay for better text visibility
             overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -70,7 +83,7 @@ def create_summary_image(
 
             # Draw distinct background rectangle for text
             padding = 20
-            max_width = max([d[0] for d in text_dims])
+            max_width = max([d[0] for d in text_dims]) if text_dims else 0
             bg_left = (width - max_width) / 2 - padding
             bg_top = current_y - padding
             bg_right = (width + max_width) / 2 + padding
@@ -86,10 +99,13 @@ def create_summary_image(
 
             # Draw text
             for i, line in enumerate(text_lines):
-                text_width, text_height = text_dims[i]
-                x = (width - text_width) / 2
-                draw.text((x, current_y), line, font=font, fill=(255, 255, 255, 255))
-                current_y += text_height + line_spacing
+                if i < len(text_dims):
+                    text_width, text_height = text_dims[i]
+                    x = (width - text_width) / 2
+                    draw.text(
+                        (x, current_y), line, font=font, fill=(255, 255, 255, 255)
+                    )
+                    current_y += text_height + line_spacing
 
             # Save result
             img.save(output_path, "PNG")

@@ -520,9 +520,7 @@ class PingHandler(BaseHandler):
                         from aiogram.types import FSInputFile
 
                         photo = FSInputFile(result_path)
-                        sent = await self.bot.send_photo(
-                            chat_id, photo, caption=text_msg
-                        )
+                        sent = await self.bot.send_photo(chat_id, photo)
                         # Clean up temp file
                         try:
                             os.remove(result_path)
