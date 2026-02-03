@@ -20,6 +20,8 @@ from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id
 from config import PING_LIMITS, EMOJIS
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
+from utils.image_utils import create_summary_image
+import os
 
 
 class PingHandler(BaseHandler):
@@ -140,6 +142,9 @@ class PingHandler(BaseHandler):
         # Should be LAST
         self.router.message(F.text)(self.handle_custom_triggers)
 
+        # Sticker Handler
+        self.router.message(Command("set_sticker"))(self.cmd_set_sticker)
+
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
         # v2.2.0: Глобальний персонал бота (від модератора і вище) має доступ всюди
@@ -241,9 +246,8 @@ class PingHandler(BaseHandler):
                     )
                     # Чистимо сповіщення про зупинку
                     await self.auto_cleanup(sent_stop)
-                except:
+                except Exception:
                     pass
-                break
                 break
 
             # v2.7.0: Dynamic Unreg Check - refresh unreg lists per chunk
@@ -491,17 +495,91 @@ class PingHandler(BaseHandler):
         if show_count and not self.chat_repo.get_stop_flag(clean_chat_id):
             try:
                 stats = self.chat_repo.get_stats(clean_chat_id)
-                completion_msg = (
-                    f"✅ <b>Виклик завершено!</b>\n"
-                    f"👥 Пропінговано: {len(users)}\n"
-                    f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост."
+
+                # Check for sticker configuration
+                sticker_path = self.chat_repo.get_setting(
+                    clean_chat_id, "summary_sticker"
                 )
-                sent = await self.bot.send_message(
-                    chat_id, completion_msg, parse_mode="HTML"
-                )
-                asyncio.create_task(self.auto_cleanup(sent))
+
+                info_lines = [
+                    "✅ Виклик завершено!",
+                    f"👥 Пропінговано: {len(users)}",
+                    f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост.",
+                ]
+                text_msg = "\n".join(info_lines)
+
+                sent = None
+                if sticker_path and os.path.exists(sticker_path):
+                    # Generate image
+                    output_path = f"data/temp_{clean_chat_id}.png"
+                    result_path = create_summary_image(
+                        sticker_path, info_lines, output_path
+                    )
+
+                    if result_path:
+                        from aiogram.types import FSInputFile
+
+                        photo = FSInputFile(result_path)
+                        sent = await self.bot.send_photo(
+                            chat_id, photo, caption=text_msg
+                        )
+                        # Clean up temp file
+                        try:
+                            os.remove(result_path)
+                        except:
+                            pass
+                    else:
+                        # Fallback to text
+                        sent = await self.bot.send_message(
+                            chat_id, text_msg, parse_mode="HTML"
+                        )
+                else:
+                    sent = await self.bot.send_message(
+                        chat_id, text_msg, parse_mode="HTML"
+                    )
+
+                if sent:
+                    asyncio.create_task(self.auto_cleanup(sent))
             except Exception as e:
                 self.logger.debug(f"Could not send completion message: {e}")
+
+    async def cmd_set_sticker(self, message: Message):
+        """Встановлює стікер для фону підсумків"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+
+        # Check if reply contains sticker
+        if not message.reply_to_message or not message.reply_to_message.sticker:
+            await message.reply(
+                "⚠️ Будь ласка, зробіть реплай на стікер, який ви хочете встановити."
+            )
+            return
+
+        try:
+            sticker = message.reply_to_message.sticker
+            chat_id = get_clean_chat_id(message.chat.id)
+
+            # Create stickers directory if not exists
+            stickers_dir = "data/stickers"
+            if not os.path.exists(stickers_dir):
+                os.makedirs(stickers_dir)
+
+            # Define path
+            file_ext = "webp"  # Default for stickers
+            save_path = f"{stickers_dir}/{chat_id}.{file_ext}"
+
+            # Download
+            await self.bot.download(sticker, destination=save_path)
+
+            # Save setting
+            self.chat_repo.set_setting(chat_id, "summary_sticker", save_path)
+
+            await message.reply(
+                "✅ Стікер встановлено! Тепер він буде використовуватись для підсумків виклику."
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to set sticker: {e}")
+            await message.reply(f"❌ Помилка при збереженні стікера: {e}")
 
     async def cmd_all(self, message: Message):
         """Пінгує всіх користувачів"""
