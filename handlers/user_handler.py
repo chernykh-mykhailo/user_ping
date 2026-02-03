@@ -637,7 +637,9 @@ class UserHandler(BaseHandler):
 
         # Check if unreg is allowed in this chat
         allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
-        if not allow_unreg:
+        is_whitelisted = self.chat_repo.is_user_unreg_whitelisted(chat_id, user_id)
+
+        if not allow_unreg and not is_whitelisted:
             denied_msg = self.chat_repo.get_setting(chat_id, "unreg_denied_message")
             if not denied_msg:
                 denied_msg = (
@@ -737,7 +739,9 @@ class UserHandler(BaseHandler):
 
         # Check if unreg is allowed in this chat
         allow_unreg = self.chat_repo.get_setting(chat_id, "allow_unreg", True)
-        if not allow_unreg:
+        is_whitelisted = self.chat_repo.is_user_unreg_whitelisted(chat_id, user_id)
+
+        if not allow_unreg and not is_whitelisted:
             denied_msg = self.chat_repo.get_setting(chat_id, "unreg_denied_message")
             if not denied_msg:
                 denied_msg = (

@@ -139,6 +139,8 @@ class PingHandler(BaseHandler):
         # 3. Dynamic Triggers (Regex !word)
         # This catches !croco (Groups) AND !custom (Aliases)
         self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
+        self.router.message(Command("deny_unreg"))(self.cmd_deny_unreg)
+        self.router.message(Command("set_watermark"))(self.cmd_set_watermark)
         self.router.message(F.text.regexp(r"^!(\w+)$", flags=0))(self.cmd_call_trigger)
 
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
@@ -146,10 +148,11 @@ class PingHandler(BaseHandler):
         self.router.message(F.text)(self.handle_custom_triggers)
 
     async def cmd_allow_unreg(self, message: Message):
-        """Дозволяє використання команди /unreg в чаті (Chat Owner Only)"""
+        """Дозволяє використання команди /unreg конкретному користувачу (або всьому чату)"""
         user_id = message.from_user.id
         chat_id = message.chat.id
 
+        # 1. Permission Check
         is_owner = False
         try:
             member = await self.bot.get_chat_member(chat_id, user_id)
@@ -159,14 +162,96 @@ class PingHandler(BaseHandler):
             pass
 
         is_bot_admin = str(user_id) == str(ADMIN_USER_ID)
-
         if not is_owner and not is_bot_admin:
             await message.reply("⚠️ Ця команда доступна тільки власнику чату.")
             return
 
         clean_chat_id = get_clean_chat_id(chat_id)
-        self.chat_repo.set_setting(clean_chat_id, "allow_unreg", True)
-        await message.reply("✅ Команду /unreg увімкнено для цього чату.")
+
+        # 2. Identify target user
+        target_uid = None
+        target_name = "користувачу"
+
+        if message.reply_to_message:
+            target_uid = str(message.reply_to_message.from_user.id)
+            target_name = message.reply_to_message.from_user.full_name
+        else:
+            args = message.text.split()
+            if len(args) > 1 and args[1].isdigit():
+                target_uid = args[1]
+
+        # 3. Action
+        if target_uid:
+            self.chat_repo.add_to_unreg_whitelist(clean_chat_id, target_uid)
+            await message.reply(
+                f"✅ Користувачу <b>{target_name}</b> (<code>{target_uid}</code>) дозволено використовувати /unreg у цьому чаті.",
+                parse_mode="HTML",
+            )
+        else:
+            # Fallback to chat-wide toggle if no user specified
+            self.chat_repo.set_setting(clean_chat_id, "allow_unreg", True)
+            await message.reply(
+                "✅ Команду /unreg увімкнено для <b>всіх</b> учасників цього чату.",
+                parse_mode="HTML",
+            )
+
+    async def cmd_deny_unreg(self, message: Message):
+        """Забороняє використання команди /unreg конкретному користувачу (або всьому чату)"""
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+
+        if not await self._is_admin(chat_id, user_id):
+            return
+
+        clean_chat_id = get_clean_chat_id(chat_id)
+        target_uid = None
+        target_name = "користувачу"
+
+        if message.reply_to_message:
+            target_uid = str(message.reply_to_message.from_user.id)
+            target_name = message.reply_to_message.from_user.full_name
+        else:
+            args = message.text.split()
+            if len(args) > 1 and args[1].isdigit():
+                target_uid = args[1]
+
+        if target_uid:
+            self.chat_repo.remove_from_unreg_whitelist(clean_chat_id, target_uid)
+            await message.reply(
+                f"❌ Користувачу <b>{target_name}</b> більше не дозволено використовувати /unreg персонально.",
+                parse_mode="HTML",
+            )
+        else:
+            self.chat_repo.set_setting(clean_chat_id, "allow_unreg", False)
+            await message.reply(
+                "❌ Команду /unreg вимкнено для всіх учасників цього чату (крім білого списку).",
+                parse_mode="HTML",
+            )
+
+    async def cmd_set_watermark(self, message: Message):
+        """Встановлює маленький текст знизу справа на зображенні"""
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+
+        if not await self._is_admin(chat_id, user_id):
+            await message.reply(
+                "⚠️ Тільки адміністратори можуть змінювати водяний знак."
+            )
+            return
+
+        parts = message.text.split(maxsplit=1)
+        watermark = parts[1].strip() if len(parts) > 1 else None
+
+        clean_chat_id = get_clean_chat_id(chat_id)
+        self.chat_repo.set_setting(clean_chat_id, "sticker_watermark", watermark)
+
+        if watermark:
+            await message.reply(
+                f"✅ Встановлено водяний знак: <code>{watermark}</code>",
+                parse_mode="HTML",
+            )
+        else:
+            await message.reply("🗑 Водяний знак видалено.")
 
     async def _is_admin(self, chat_id: int, user_id: int) -> bool:
         """Перевіряє права адміністратора"""
@@ -534,16 +619,19 @@ class PingHandler(BaseHandler):
                 sent = None
                 if sticker_path and os.path.exists(sticker_path):
                     # Generate image
-                    output_path = f"data/temp_{clean_chat_id}.png"
+                    output_path = f"data/temp_{clean_chat_id}.webp"
+                    watermark = self.chat_repo.get_setting(
+                        clean_chat_id, "sticker_watermark"
+                    )
                     result_path = create_summary_image(
-                        sticker_path, info_lines, output_path
+                        sticker_path, info_lines, output_path, watermark=watermark
                     )
 
                     if result_path:
                         from aiogram.types import FSInputFile
 
-                        photo = FSInputFile(result_path)
-                        sent = await self.bot.send_photo(chat_id, photo)
+                        sticker_file = FSInputFile(result_path)
+                        sent = await self.bot.send_sticker(chat_id, sticker_file)
                         # Clean up temp file
                         try:
                             os.remove(result_path)
@@ -565,14 +653,28 @@ class PingHandler(BaseHandler):
                 self.logger.debug(f"Could not send completion message: {e}")
 
     async def cmd_set_sticker(self, message: Message):
-        """Встановлює стікер для фону підсумків"""
-        if not await self._is_admin(message.chat.id, message.from_user.id):
+        """Встановлює або видаляє стікер для фону підсумків"""
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+
+        if not await self._is_admin(chat_id, user_id):
             return
 
-        # Check if reply contains sticker
+        clean_chat_id = get_clean_chat_id(chat_id)
+
+        # Якщо це не реплай на стікер — видаляємо налаштування
         if not message.reply_to_message or not message.reply_to_message.sticker:
+            old_path = self.chat_repo.get_setting(clean_chat_id, "summary_sticker")
+            self.chat_repo.set_setting(clean_chat_id, "summary_sticker", None)
+
+            if old_path and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except:
+                    pass
+
             await message.reply(
-                "⚠️ Будь ласка, зробіть реплай на стікер, який ви хочете встановити."
+                "🗑 Стікер для підсумків видалено. Тепер будуть надсилатись звичайні текстові звіти."
             )
             return
 

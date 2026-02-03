@@ -173,6 +173,15 @@ class ChatRepository:
     def clear_all_unreg_in_chat(self, chat_id: str, exclude_super: bool = False) -> int:
         return self.unreg.clear_all_unreg_in_chat(chat_id, exclude_super)
 
+    def add_to_unreg_whitelist(self, chat_id: str, user_id: str) -> bool:
+        return self.unreg.add_to_unreg_whitelist(chat_id, user_id)
+
+    def remove_from_unreg_whitelist(self, chat_id: str, user_id: str) -> bool:
+        return self.unreg.remove_from_unreg_whitelist(chat_id, user_id)
+
+    def is_user_unreg_whitelisted(self, chat_id: str, user_id: str) -> bool:
+        return self.unreg.is_user_unreg_whitelisted(chat_id, user_id)
+
     # === Staff (delegates to StaffRolesDomain) ===
 
     def is_owner(self, user_id: int) -> bool:

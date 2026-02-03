@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_summary_image(
-    sticker_path: str, text_lines: List[str], output_path: str
+    sticker_path: str, text_lines: List[str], output_path: str, watermark: str = None
 ) -> str:
     """
     Overlays text on a sticker image.
@@ -173,7 +173,45 @@ def create_summary_image(
 
                 current_y += line_data["h"] + line_spacing
 
-            img.save(output_path, "PNG")
+            # Draw Watermark (Bottom-Right, subtle)
+            if watermark:
+                wm_font_size = max(12, int(font_size * 0.5))
+                wm_font = load_font(text_font_paths, wm_font_size)
+
+                # Create a fresh overlay for the watermark to ensure alpha works
+                wm_overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                wm_draw = ImageDraw.Draw(wm_overlay)
+
+                wm_bbox = wm_draw.textbbox((0, 0), watermark, font=wm_font)
+                wm_w = wm_bbox[2] - wm_bbox[0]
+                wm_h = wm_bbox[3] - wm_bbox[1]
+
+                # Position: bottom-right with 15px padding
+                padding_cm = 15
+                wm_x = width - wm_w - padding_cm
+                wm_y = height - wm_h - padding_cm
+
+                # Subtle dark background for the watermark itself to improve visibility
+                wm_bg_padding = 4
+                wm_draw.rectangle(
+                    [
+                        wm_x - wm_bg_padding,
+                        wm_y - wm_bg_padding,
+                        wm_x + wm_w + wm_bg_padding,
+                        wm_y + wm_h + wm_bg_padding,
+                    ],
+                    fill=(0, 0, 0, 60),  # Very light dark tint
+                )
+
+                # Draw text with higher opacity on the overlay
+                wm_draw.text(
+                    (wm_x, wm_y), watermark, font=wm_font, fill=(255, 255, 255, 180)
+                )
+
+                # Merge the watermark overlay
+                img = Image.alpha_composite(img, wm_overlay)
+
+            img.save(output_path, "WEBP")
             return output_path
 
     except Exception as e:
