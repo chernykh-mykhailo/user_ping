@@ -126,7 +126,8 @@ def create_summary_image(
             total_text_height -= line_spacing
 
             # Draw background
-            current_y = (height - total_text_height) / 2
+            # v3.0.0: Move text block lower (75% height instead of 50%)
+            current_y = (height * 0.75) - (total_text_height / 2)
             padding = 20
             max_width = max([l["w"] for l in processed_lines]) if processed_lines else 0
 
@@ -136,7 +137,7 @@ def create_summary_image(
             bg_bottom = current_y + total_text_height + padding
 
             overlay_draw.rectangle(
-                [bg_left, bg_top, bg_right, bg_bottom], fill=(0, 0, 0, 160)
+                [bg_left, bg_top, bg_right, bg_bottom], fill=(0, 0, 0, 180)
             )
 
             # Composite
@@ -147,24 +148,34 @@ def create_summary_image(
             for line_data in processed_lines:
                 x = (width - line_data["w"]) / 2
 
+                # Helper to draw text with shadow
+                def draw_text_with_shadow(draw_obj, pos, text, font, fill):
+                    # Subtle shadow
+                    shadow_pos = (pos[0] + 1, pos[1] + 1)
+                    draw_obj.text(shadow_pos, text, font=font, fill=(0, 0, 0, 128))
+                    draw_obj.text(pos, text, font=font, fill=fill)
+
                 if line_data["type"] == "dual":
-                    # Draw Emoji with Emoji Font
-                    draw.text(
+                    # Draw Emoji
+                    draw_text_with_shadow(
+                        draw,
                         (x, current_y),
                         line_data["emoji"],
                         font=emoji_font,
                         fill=(255, 255, 255, 255),
                     )
-                    # Draw Text with Text Font
+                    # Draw Text
                     text_x = x + line_data["ew"] + line_data["spacing"]
-                    draw.text(
+                    draw_text_with_shadow(
+                        draw,
                         (text_x, current_y),
                         line_data["text"],
                         font=text_font,
                         fill=(255, 255, 255, 255),
                     )
                 else:
-                    draw.text(
+                    draw_text_with_shadow(
+                        draw,
                         (x, current_y),
                         line_data["text"],
                         font=text_font,
