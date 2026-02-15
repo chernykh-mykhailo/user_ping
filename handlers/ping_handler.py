@@ -13,8 +13,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     CallbackQuery,
-    MessageEntity,
-    User,
 )
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id, render_emoji, extract_custom_emoji_id
@@ -551,117 +549,70 @@ class PingHandler(BaseHandler):
                 if is_first_chunk and show_count:
                     count_text = f" (👥 {len(user_ids)})"
 
-                # Відправляємо повідомлення з повторами при FloodControl (v1.6.5)
-                # Helper: UTF-16 довжина для Telegram entities
-                def utf16_len(text: str) -> int:
-                    return len(text.encode("utf-16-le")) // 2
+                import html
 
                 sent_message = None
                 while not sent_message:
                     try:
-                        # v2.10.7: Використовуємо MessageEntity для кастомних емодзі
-                        text_parts = [f"{call_text}{count_text}\n\n"]
-                        entities = []
-                        current_offset = utf16_len(text_parts[0])
+                        # v2.10.8: Використовуємо HTML для кращої підтримки Custom Emoji
+                        text_parts = [
+                            f"{html.escape(call_text)}{html.escape(count_text)}\n\n"
+                        ]
 
                         for mention_data in mentions:
                             if not isinstance(mention_data, tuple):
                                 continue
 
-                            if mention_data[0] == "custom_emoji":
+                            type_ = mention_data[0]
+                            uid = mention_data[2]
+                            user_name = (
+                                mention_data[3]
+                                if len(mention_data) > 3
+                                else "Користувач"
+                            )
+                            safe_name = html.escape(user_name)
+
+                            if type_ == "custom_emoji":
                                 emoji_id = mention_data[1]
-                                uid = mention_data[2]
-                                user_name = (
-                                    mention_data[3] if len(mention_data) > 3 else "✨"
-                                )
+                                # ПРЕМИУМ ЕМОДЗІ: <a href="..."> + <tg-emoji>
+                                emoji_html = f'<a href="tg://user?id={uid}"><tg-emoji emoji-id="{emoji_id}">✨</tg-emoji></a>'
+                                text_parts.append(emoji_html)
 
-                                # Додаємо placeholder для custom_emoji
-                                emoji_placeholder = "✨"
-                                text_parts.append(emoji_placeholder)
-                                entities.append(
-                                    MessageEntity(
-                                        type="custom_emoji",
-                                        offset=current_offset,
-                                        length=utf16_len(emoji_placeholder),
-                                        custom_emoji_id=emoji_id,
-                                    )
-                                )
-                                current_offset += utf16_len(emoji_placeholder)
-
-                                # Додаємо ім'я (якщо show_names=True)
                                 if show_names:
-                                    text_parts.append(" ")
-                                    current_offset += 1
-
-                                    mention_text = user_name
-                                    text_parts.append(mention_text)
-                                    entities.append(
-                                        MessageEntity(
-                                            type="text_mention",
-                                            offset=current_offset,
-                                            length=utf16_len(mention_text),
-                                            user=User(
-                                                id=int(uid),
-                                                is_bot=False,
-                                                first_name=user_name,
-                                            ),
-                                        )
+                                    text_parts.append(
+                                        f' <a href="tg://user?id={uid}">{safe_name}</a>'
                                     )
-                                    current_offset += utf16_len(mention_text)
 
                                 text_parts.append(" ")
-                                current_offset += 1
                             else:
-                                # Звичайний емодзі
-                                emoji_text = mention_data[1]
-                                uid = mention_data[2]
-                                user_name = (
-                                    mention_data[3] if len(mention_data) > 3 else "✨"
-                                )
+                                # ЗВИЧАЙНИЙ ЕМОДЗІ або ТЕКСТ
+                                val = mention_data[
+                                    1
+                                ]  # Вже заскейплено в activity_service або вище
 
                                 if show_names:
-                                    # Емодзі + ім'я
-                                    text_parts.append(emoji_text)
-                                    current_offset += utf16_len(emoji_text)
-
-                                    text_parts.append(" ")
-                                    current_offset += 1
-
-                                    mention_text = user_name
-                                    text_parts.append(mention_text)
-                                    entities.append(
-                                        MessageEntity(
-                                            type="text_mention",
-                                            offset=current_offset,
-                                            length=utf16_len(mention_text),
-                                            user=User(
-                                                id=int(uid),
-                                                is_bot=False,
-                                                first_name=user_name,
-                                            ),
-                                        )
+                                    # Рендеримо як: 🦾 <a href="tg://user?id=...">Ім'я</a>
+                                    text_parts.append(
+                                        f'{val} <a href="tg://user?id={uid}">{safe_name}</a>'
                                     )
-                                    current_offset += utf16_len(mention_text)
-
-                                    text_parts.append(" ")
-                                    current_offset += 1
                                 else:
-                                    # Тільки емодзі без mention
-                                    text_parts.append(emoji_text)
-                                    current_offset += utf16_len(emoji_text)
+                                    # Рендеримо як: <a href="tg://user?id=...">🦾</a> (невидимий mention)
+                                    text_parts.append(
+                                        f'<a href="tg://user?id={uid}">{val}</a>'
+                                    )
 
-                                    text_parts.append(" ")
-                                    current_offset += 1
+                                text_parts.append(" ")
 
-                        full_message = "".join(text_parts).rstrip() + footer_text
+                        full_message = "".join(text_parts).rstrip() + html.escape(
+                            footer_text
+                        )
 
-                        print(f"DEBUG: Відправляю повідомлення:\n{full_message}")
-                        print(f"DEBUG: Entities: {entities}")
+                        print(f"DEBUG: Відправляю повідомлення (HTML):\n{full_message}")
 
                         sent_message = await self.bot.send_message(
                             chat_id,
                             full_message,
-                            entities=entities,
+                            parse_mode="HTML",
                             reply_markup=keyboard,
                             disable_notification=silent_mode,
                         )

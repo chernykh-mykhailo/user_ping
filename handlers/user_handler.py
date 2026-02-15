@@ -1033,9 +1033,15 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
-        # 1. Спроба витягти преміум-емодзі
-        custom_id = extract_custom_emoji_id(message)
-        print(f"[SETEMOJI] Extracted custom_emoji_id: {custom_id}")
+        from utils.helpers import extract_emoji_info, render_emoji
+
+        # 1. Спроба витягти преміум-емодзі або звичайний
+        info = extract_emoji_info(message)
+        custom_id = info.get("custom_id")
+        emoji_val = info.get("emoji")
+
+        print(f"[SETEMOJI] Info: custom_id={custom_id}, emoji={emoji_val}")
+
         if custom_id:
             msg_status = await message.answer(
                 l10n.format_value("emoji_pack.cloning"), parse_mode="HTML"
@@ -1077,42 +1083,20 @@ class UserHandler(BaseHandler):
                 # Також зберігаємо в колекцію для можливості вибору пізніше
                 if self.emoji_service:
                     try:
-                        stickers = (
-                            await self.emoji_service.bot.get_custom_emoji_stickers(
-                                [custom_id]
-                            )
-                        )
-                        emoji_char = stickers[0].emoji if stickers else "✨"
                         self.chat_repo.emoji_packs.save_emoji_mapping(
-                            custom_id, custom_id, emoji_char
+                            custom_id, custom_id, emoji_val or "✨"
                         )
                     except Exception as e:
                         print(f"[SETEMOJI] Warning: Could not save to collection: {e}")
 
                 print(f"[SETEMOJI] ✅ Saved successfully!")
 
-                # Формуємо повідомлення з custom emoji в кінці
+                # Рендеримо через HTML (так надійніше і працює у користувача)
+                emoji_html = render_emoji(f"tg-emoji:{custom_id}")
                 success_text = l10n.format_value("emoji_pack.success")
-                # Додаємо placeholder в кінець
-                success_text += " 🎨"
-
-                # Позиція емодзі — в кінці тексту
-                emoji_pos = len(success_text) - 1
-
-                from aiogram.types import MessageEntity
-
-                entities = [
-                    MessageEntity(
-                        type="custom_emoji",
-                        offset=emoji_pos,
-                        length=1,
-                        custom_emoji_id=custom_id,
-                    )
-                ]
 
                 await msg_status.edit_text(
-                    success_text,
-                    entities=entities,
+                    f"{success_text} {emoji_html}\nВін буде відображатися біля вашого імені.",
                     parse_mode="HTML",
                 )
             except Exception as e:
@@ -1177,14 +1161,14 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
-        emoji = parts[1].strip()
+        emoji = emoji_val.strip()
 
         if emoji.lower() == "none":
             self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", "")
             await message.answer("✅ Персональний емодзі видалено.")
             return
 
-        # Валідація: не більше 10 символів (prev: 5)
+        # Валідація: не більше 10 символів
         if len(emoji) > 10:
             await message.answer(
                 "❌ Занадто довгий текст. Будь ласка, використовуйте один емодзі."
@@ -1193,7 +1177,8 @@ class UserHandler(BaseHandler):
 
         self.chat_repo.set_user_setting(message.from_user.id, "personal_emoji", emoji)
         await message.answer(
-            f"✅ Персональний емодзі встановлено: {emoji}\nТепер він буде відображатися в /help"
+            f"✅ Персональний емодзі встановлено: {emoji}\nВін буде відображатися біля вашого імені.",
+            parse_mode="HTML",
         )
 
     async def callback_select_emoji(self, callback: CallbackQuery):

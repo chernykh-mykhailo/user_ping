@@ -25,18 +25,46 @@ def render_emoji(emoji_data: str) -> str:
     return html.escape(str(emoji_data))
 
 
+def extract_emoji_info(message) -> dict:
+    """
+    Витягує інформацію про емодзі з повідомлення.
+    Повертає dict з ключами 'custom_id' та 'emoji'.
+    """
+    res = {"custom_id": None, "emoji": None}
+
+    # 1. Шукаємо преміум-емодзі в сутностях
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == "custom_emoji":
+                res["custom_id"] = entity.custom_emoji_id
+                # Спробуємо також витягти сам символ, якщо він є
+                try:
+                    res["emoji"] = message.text[
+                        entity.offset : entity.offset + entity.length
+                    ]
+                except Exception:
+                    pass
+                return res
+
+    # 2. Якщо не знайшли преміум, шукаємо звичайний емодзі в тексті (після команди)
+    if message.text:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) > 1:
+            candidate = parts[1].strip()
+            # Беремо тільки перший символ/емодзі
+            if candidate:
+                res["emoji"] = candidate
+                # Якщо це просто текст, ми його збережемо як є (до 10 символів)
+
+    return res
+
+
 def extract_custom_emoji_id(message) -> str:
     """
-    Витягує custom_emoji_id з повідомлення, якщо воно там є
+    Backward compatibility: витягує ТІЛЬКИ custom_emoji_id
     """
-    if not message.entities:
-        return None
-
-    for entity in message.entities:
-        if entity.type == "custom_emoji":
-            return entity.custom_emoji_id
-
-    return None
+    info = extract_emoji_info(message)
+    return info.get("custom_id")
 
 
 def get_clean_chat_id(chat_id: int) -> str:
