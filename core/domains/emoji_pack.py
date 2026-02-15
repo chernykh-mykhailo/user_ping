@@ -64,6 +64,18 @@ class EmojiPackDomain:
 
         return mapping  # Legacy string support
 
+    def get_registered_emoji_alt(self, custom_id: str) -> Optional[str]:
+        """Повертає alt-символ для емодзі (оригінального або ботівського)"""
+        data = self.storage.load()
+        mapping = data.get("emoji_mapping", {})
+
+        # Пошук по всіх мапінгах
+        for orig_id, val in mapping.items():
+            if isinstance(val, dict):
+                if orig_id == custom_id or val.get("bot_id") == custom_id:
+                    return val.get("alt")
+        return None
+
     def save_emoji_mapping(
         self, original_custom_id: str, bot_custom_id: str, alt: str = "✨"
     ) -> None:

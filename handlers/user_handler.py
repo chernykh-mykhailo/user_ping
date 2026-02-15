@@ -1080,14 +1080,24 @@ class UserHandler(BaseHandler):
                     f"tg-emoji:{custom_id}",
                 )
 
-                # Також зберігаємо в колекцію для можливості вибору пізніше
                 if self.emoji_service:
                     try:
-                        self.chat_repo.emoji_packs.save_emoji_mapping(
-                            custom_id, custom_id, emoji_val or "✨"
+                        # v2.10.8: Тепер реально клонуємо в наш пак
+                        new_id = await self.emoji_service.clone_emoji(
+                            custom_id, message.from_user.id
                         )
+                        if new_id:
+                            custom_id = new_id
+                            print(
+                                f"[SETEMOJI] Successfully cloned! New ID: {custom_id}"
+                            )
+                        else:
+                            print(
+                                f"[SETEMOJI] Cloning returned None, using original ID: {custom_id}"
+                            )
+
                     except Exception as e:
-                        print(f"[SETEMOJI] Warning: Could not save to collection: {e}")
+                        print(f"[SETEMOJI] Warning: Could not clone: {e}")
 
                 print(f"[SETEMOJI] ✅ Saved successfully!")
 
@@ -1116,6 +1126,26 @@ class UserHandler(BaseHandler):
             # Перевіряємо преміум бота (тільки власники преміуму можуть обирати з колекції)
             is_premium = self.premium_repo.has_premium(message.from_user.id)
             if is_premium:
+                pack = self.chat_repo.emoji_packs.get_active_pack()
+                if pack:
+                    # v2.10.9: Перевіряємо, чи пак належить поточному боту
+                    if (
+                        not pack["name"]
+                        .lower()
+                        .endswith(f"_by_{self.me.username}".lower())
+                    ):
+                        self.logger.warning(
+                            f"Active pack {pack['name']} doesn't match bot {self.me.username}. Ignoring."
+                        )
+                        # If the pack doesn't belong to this bot, treat it as if no pack is active
+                        pack = None
+
+                if not pack:
+                    await message.answer(
+                        l10n.format_value("emoji_pack.no_emojis"), parse_mode="HTML"
+                    )
+                    return
+
                 emojis = self.chat_repo.emoji_packs.get_all_cloned_emojis()
                 if not emojis:
                     await message.answer(

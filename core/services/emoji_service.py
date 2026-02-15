@@ -32,7 +32,12 @@ class EmojiPackService:
 
         pack = self.chat_repo.emoji_packs.get_active_pack()
         if pack:
-            return pack
+            # v2.10.9: Перевіряємо, чи пак належить поточному боту
+            if pack["name"].lower().endswith(f"_by_{self.me.username}".lower()):
+                return pack
+            logger.warning(
+                f"Active pack {pack['name']} doesn't match bot {self.me.username}. Ignoring."
+            )
 
         # Створюємо новий пак
         packs = self.chat_repo.emoji_packs.get_packs()

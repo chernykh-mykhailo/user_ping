@@ -504,9 +504,18 @@ class PingHandler(BaseHandler):
                     # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
                     if str(emoji_label).startswith("tg-emoji:"):
                         emoji_id = emoji_label.split(":")[1]
-                        print(f"[PING] Premium emoji detected! ID={emoji_id}")
-                        # Зберігаємо: (type, emoji_id, uid, user_name)
-                        mentions.append(("custom_emoji", emoji_id, uid, user_name))
+                        # Спробуємо знайти alt-символ в мапінгу
+                        alt = (
+                            self.chat_repo.emoji_packs.get_registered_emoji_alt(
+                                emoji_id
+                            )
+                            or "✨"
+                        )
+                        print(
+                            f"[PING] Premium emoji detected! ID={emoji_id}, alt={alt}"
+                        )
+                        # Зберігаємо: (type, emoji_id, uid, user_name, alt)
+                        mentions.append(("custom_emoji", emoji_id, uid, user_name, alt))
                     else:
                         import html
 
@@ -574,8 +583,9 @@ class PingHandler(BaseHandler):
 
                             if type_ == "custom_emoji":
                                 emoji_id = mention_data[1]
+                                alt = mention_data[4] if len(mention_data) > 4 else "✨"
                                 # ПРЕМИУМ ЕМОДЗІ: <a href="..."> + <tg-emoji>
-                                emoji_html = f'<a href="tg://user?id={uid}"><tg-emoji emoji-id="{emoji_id}">✨</tg-emoji></a>'
+                                emoji_html = f'<a href="tg://user?id={uid}"><tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji></a>'
                                 text_parts.append(emoji_html)
 
                                 if show_names:
