@@ -1114,7 +1114,8 @@ class UserHandler(BaseHandler):
 
         if not message.reply_to_message:
             sent = await message.answer(
-                "ℹ️ Використовуйте команду як <b>відповідь</b> на повідомлення юзера, якого треба зареєструвати."
+                "ℹ️ Використовуйте команду як <b>відповідь</b> на повідомлення юзера, якого треба зареєструвати.",
+                parse_mode="HTML",
             )
             await self.auto_cleanup(message, sent)
             return
