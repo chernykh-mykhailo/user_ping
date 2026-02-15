@@ -496,13 +496,22 @@ class PingHandler(BaseHandler):
 
                 if use_emoji:
                     personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
-                    emoji_label = personal if personal else random.choice(EMOJIS)
+
+                    # v2.10.11: Логіка розділення:
+                    # 1. Якщо є персональний емодзі - використовуємо його завжди.
+                    # 2. Якщо немає:
+                    #    - У команді з іменами (/all) - нічого не додаємо (просто ім'я).
+                    #    - У команді БЕЗ імен (/emoji) - ставимо рандомний емодзі, щоб не палити ім'я.
+                    emoji_label = personal
+                    if not emoji_label and not show_names:
+                        emoji_label = random.choice(EMOJIS)
+
                     print(
-                        f"[PING] User {uid}: personal={personal}, emoji={emoji_label}, name={user_name}"
+                        f"[PING] User {uid}: personal={personal}, final_label={emoji_label}, show_names={show_names}"
                     )
 
                     # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
-                    if str(emoji_label).startswith("tg-emoji:"):
+                    if emoji_label and str(emoji_label).startswith("tg-emoji:"):
                         emoji_id = emoji_label.split(":")[1]
                         # Спробуємо знайти alt-символ в мапінгу
                         alt = (
@@ -516,12 +525,18 @@ class PingHandler(BaseHandler):
                         )
                         # Зберігаємо: (type, emoji_id, uid, user_name, alt)
                         mentions.append(("custom_emoji", emoji_id, uid, user_name, alt))
-                    else:
+                    elif emoji_label:
                         import html
 
                         safe_emoji = html.escape(str(emoji_label))
                         print(f"[PING] Regular emoji: safe_emoji={safe_emoji}")
                         mentions.append(("regular", safe_emoji, uid, user_name))
+                    else:
+                        # Якщо емодзі немає - просто текст (але для /emoji це може бути порожньо)
+                        import html
+
+                        safe_name = html.escape(user_name)
+                        mentions.append(("text", safe_name, uid, user_name))
                 else:
                     # v2.9.0: Fix for special characters in names breaking HTML
                     import html
@@ -584,29 +599,44 @@ class PingHandler(BaseHandler):
                             if type_ == "custom_emoji":
                                 emoji_id = mention_data[1]
                                 alt = mention_data[4] if len(mention_data) > 4 else "✨"
-                                # ПРЕМИУМ ЕМОДЗІ: <a href="..."> + <tg-emoji>
-                                emoji_html = f'<a href="tg://user?id={uid}"><tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji></a>'
-                                text_parts.append(emoji_html)
 
                                 if show_names:
+                                    # 🌸 <a href="...">Мишко</a>
+                                    # Клік по емодзі відкриє пак, клік по імені - профіль. Обидва пінгують.
+                                    text_parts.append(
+                                        f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
+                                    )
                                     text_parts.append(
                                         f' <a href="tg://user?id={uid}">{safe_name}</a>'
+                                    )
+                                else:
+                                    # ПРЕМИУМ ЕМОДЗІ + НЕВИДИМИЙ ПІНГ
+                                    # <tg-emoji> відкриває пак, <a> з ZWSP робить невидимий пінг поруч
+                                    text_parts.append(
+                                        f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
+                                    )
+                                    text_parts.append(
+                                        f'<a href="tg://user?id={uid}">&#8203;</a>'
                                     )
 
                                 text_parts.append(" ")
                             else:
                                 # ЗВИЧАЙНИЙ ЕМОДЗІ або ТЕКСТ
-                                val = mention_data[
-                                    1
-                                ]  # Вже заскейплено в activity_service або вище
+                                val = mention_data[1]
 
                                 if show_names:
-                                    # Рендеримо як: 🦾 <a href="tg://user?id=...">Ім'я</a>
-                                    text_parts.append(
-                                        f'{val} <a href="tg://user?id={uid}">{safe_name}</a>'
-                                    )
+                                    if type_ == "text":
+                                        # Тільки ім'я-посилання: <a href="...">Ім'я</a>
+                                        text_parts.append(
+                                            f'<a href="tg://user?id={uid}">{safe_name}</a>'
+                                        )
+                                    else:
+                                        # Емодзі + ім'я-посилання: 🦾 <a href="...">Ім'я</a>
+                                        text_parts.append(
+                                            f'{val} <a href="tg://user?id={uid}">{safe_name}</a>'
+                                        )
                                 else:
-                                    # Рендеримо як: <a href="tg://user?id=...">🦾</a> (невидимий mention)
+                                    # Тільки емодзі-посилання: <a href="...">🦾</a>
                                     text_parts.append(
                                         f'<a href="tg://user?id={uid}">{val}</a>'
                                     )

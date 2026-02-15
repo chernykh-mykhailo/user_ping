@@ -18,7 +18,6 @@ from utils.helpers import (
     get_clean_chat_id,
     get_user_name,
     render_emoji,
-    extract_custom_emoji_id,
 )
 from utils.l10n import l10n
 from config import (
@@ -1074,12 +1073,6 @@ class UserHandler(BaseHandler):
                     )
                     return
 
-                self.chat_repo.set_user_setting(
-                    message.from_user.id,
-                    "personal_emoji",
-                    f"tg-emoji:{custom_id}",
-                )
-
                 if self.emoji_service:
                     try:
                         # v2.10.8: Тепер реально клонуємо в наш пак
@@ -1098,6 +1091,13 @@ class UserHandler(BaseHandler):
 
                     except Exception as e:
                         print(f"[SETEMOJI] Warning: Could not clone: {e}")
+
+                # v2.10.12: Зберігаємо КЛОНОВАНИЙ ID в налаштування користувача
+                self.chat_repo.set_user_setting(
+                    message.from_user.id,
+                    "personal_emoji",
+                    f"tg-emoji:{custom_id}",
+                )
 
                 print(f"[SETEMOJI] ✅ Saved successfully!")
 
