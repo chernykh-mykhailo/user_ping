@@ -158,7 +158,7 @@ class PingHandler(BaseHandler):
             member = await self.bot.get_chat_member(chat_id, user_id)
             if member.status == "creator":
                 is_owner = True
-        except:
+        except Exception:
             pass
 
         is_bot_admin = str(user_id) == str(ADMIN_USER_ID)
@@ -263,7 +263,7 @@ class PingHandler(BaseHandler):
         try:
             member = await self.bot.get_chat_member(cid, user_id)
             return member.status in ["creator", "administrator"]
-        except:
+        except Exception:
             return False
 
     async def _get_admin_users(self, chat_id: int) -> dict:
@@ -277,7 +277,7 @@ class PingHandler(BaseHandler):
                 member = await self.bot.get_chat_member(chat_id, int(uid))
                 if member.status in ["creator", "administrator"]:
                     admin_users[uid] = name
-            except:
+            except Exception:
                 continue
 
         return admin_users
@@ -310,7 +310,7 @@ class PingHandler(BaseHandler):
 
         # Скидаємо прапорець зупинки перед початком
         self.chat_repo.set_stop_flag(clean_chat_id, False)
-        self.logger.info(f"[DEBUG] Stop flag скинуто")
+        self.logger.info("[DEBUG] Stop flag скинуто")
 
         # Отримуємо налаштування чату
         pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
@@ -363,30 +363,27 @@ class PingHandler(BaseHandler):
                     pass
                 break
 
-            # v2.7.0: Dynamic Unreg Check - refresh unreg lists per chunk
-            chat_data = self.chat_repo.get_chat_data(clean_chat_id)
-            temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
-            super_unreg = set(map(str, chat_data.get("super_unreg", [])))
-            # Global unreg check
-            db_data = self.chat_repo.db.load()
-            global_unreg = set(
-                map(str, db_data.get("global_unreg", {}).get("temp", []))
-            )
-            global_super = set(
-                map(str, db_data.get("global_unreg", {}).get("super", []))
-            )
+            # v2.10.18: Dynamic Unreg Check - refresh unreg lists per chunk using centralized logic
+            (
+                temp_unreg,
+                super_unreg,
+                super_puper,
+                global_unreg,
+                global_super,
+                local_reg,
+            ) = self.chat_repo.unreg.get_all_unreg_sets(clean_chat_id)
 
             chunk = user_ids[i : i + chunk_size]
             mentions = []
 
             for uid in chunk:
-                # Late check for unreg (in case they unreg during the call)
-                if (
-                    uid in temp_unreg
-                    or uid in super_unreg
-                    or uid in global_unreg
-                    or uid in global_super
-                ):
+                # Late check for unreg (v2.10.18: consistent with get_active_users)
+                is_local_unreg = (
+                    uid in temp_unreg or uid in super_unreg or uid in super_puper
+                )
+                is_global_unreg = uid in global_unreg or uid in global_super
+
+                if is_local_unreg or (is_global_unreg and uid not in local_reg):
                     continue
 
                 label = users[uid]
@@ -471,10 +468,10 @@ class PingHandler(BaseHandler):
                                     831190060, error_msg, parse_mode="HTML"
                                 )
                             )
-                        except:
+                        except Exception:
                             pass
 
-                    except:
+                    except Exception:
                         pass
 
                 # FINAL SAFETY: Never show ID in chat
@@ -678,7 +675,7 @@ class PingHandler(BaseHandler):
                                         parse_mode="HTML",
                                     )
                                     asyncio.create_task(self.auto_cleanup(wait_msg))
-                                except:
+                                except Exception:
                                     pass
 
                             await asyncio.sleep(wait_time + 1)
@@ -782,7 +779,7 @@ class PingHandler(BaseHandler):
                         # Clean up temp file
                         try:
                             os.remove(result_path)
-                        except:
+                        except Exception:
                             pass
                     else:
                         # Fallback to text
@@ -817,7 +814,7 @@ class PingHandler(BaseHandler):
             if old_path and os.path.exists(old_path):
                 try:
                     os.remove(old_path)
-                except:
+                except Exception:
                     pass
 
             await message.reply(
@@ -1063,7 +1060,7 @@ class PingHandler(BaseHandler):
                 ps = datetime.fromisoformat(
                     ps_str.replace("+00:00", "").replace("Z", "")
                 )
-            except:
+            except Exception:
                 continue  # Skip invalid dates
 
             match_found = False
@@ -1500,7 +1497,7 @@ class PingHandler(BaseHandler):
 
             try:
                 await message.delete()
-            except:
+            except Exception:
                 pass
 
             if type_ == "emoji":
@@ -1572,7 +1569,7 @@ class PingHandler(BaseHandler):
 
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
 
         call_text = f"🎯 Тригер: {trigger_name}"
@@ -1635,7 +1632,7 @@ class PingHandler(BaseHandler):
 
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
 
         await self.bot.send_message(
@@ -1764,7 +1761,7 @@ class PingHandler(BaseHandler):
             await message.edit_text(
                 panel_text, reply_markup=keyboard, parse_mode="HTML"
             )
-        except:
+        except Exception:
             pass
 
     async def callback_stop_ping(self, callback: CallbackQuery):
@@ -1800,7 +1797,7 @@ class PingHandler(BaseHandler):
             await callback.message.edit_text(
                 callback.message.text + stop_text, parse_mode="HTML", reply_markup=None
             )
-        except:
+        except Exception:
             pass
 
     # === Custom Triggers Logic ===
@@ -2034,7 +2031,7 @@ class PingHandler(BaseHandler):
 
             try:
                 await message.delete()
-            except:
+            except Exception:
                 pass
 
             if found_type == "emoji":

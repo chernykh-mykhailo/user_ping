@@ -88,6 +88,70 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Docker (рекомендовано для продакшену)
+
+1. **Створіть `.env` файл** з вашими налаштуваннями:
+```env
+API_ID=your_api_id
+API_HASH=your_api_hash
+BOT_TOKEN=your_bot_token
+PAYMENT_TOKEN=your_payment_token
+ADMIN_USER_ID=your_telegram_id
+```
+
+2. **Зберіть Docker образ:**
+```bash
+docker build -t telegram-ping-bot .
+```
+
+3. **Запустіть контейнер:**
+```bash
+docker run -d \
+  --name ping-bot \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  telegram-ping-bot
+```
+
+4. **Перегляд логів:**
+```bash
+docker logs -f ping-bot
+```
+
+5. **Зупинка/перезапуск:**
+```bash
+docker stop ping-bot
+docker start ping-bot
+docker restart ping-bot
+```
+
+**Примітка:** Docker образ включає всі необхідні шрифти (DejaVu, Liberation, Noto) для коректної роботи `/set_sticker` на Linux.
+
+### Docker Compose (найпростіший спосіб)
+
+1. **Створіть `.env` файл** (як вище)
+
+2. **Запустіть:**
+```bash
+docker-compose up -d
+```
+
+3. **Перегляд логів:**
+```bash
+docker-compose logs -f
+```
+
+4. **Зупинка:**
+```bash
+docker-compose down
+```
+
+5. **Перезбірка після змін:**
+```bash
+docker-compose up -d --build
+```
+
+
 ### Завантаження на GitHub
 
 Детальні інструкції в [GIT_SETUP.md](GIT_SETUP.md)

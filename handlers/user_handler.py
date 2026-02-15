@@ -928,12 +928,21 @@ class UserHandler(BaseHandler):
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
 
+        # Перевіряємо глобальний статус перед змінами (v2.10.18: для кращого фідбеку)
+        glob_status = self.chat_repo.is_globally_unreg(user_id)
+        is_glob_unreg = glob_status["temp"] or glob_status["super"]
+
         removed = self.chat_repo.remove_from_unreg(chat_id, user_id)
 
         if removed:
-            sent = await message.answer(
-                "✅ Пінги увімкнено! Тепер ви знову отримуватимете сповіщення."
-            )
+            if is_glob_unreg:
+                msg = (
+                    "🔔 <b>Пінги увімкнено!</b>\n"
+                    "(Ви використали локальне перекриття для цього чату, глобальний анрег залишається активним)"
+                )
+            else:
+                msg = "✅ Пінги увімкнено! Тепер ви знову отримуватимете сповіщення."
+            sent = await message.answer(msg, parse_mode="HTML")
         else:
             sent = await message.answer("ℹ️ Ви і так отримуєте пінги.")
 

@@ -7,6 +7,14 @@ WORKDIR /app
 # Копіюємо файл залежностей
 COPY requirements.txt .
 
+# Встановлюємо системні залежності та шрифти для PIL/Pillow
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-dejavu \
+    fonts-liberation \
+    fonts-noto \
+    fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
+
 # Встановлюємо бібліотеки
 RUN pip install --no-cache-dir -r requirements.txt
 

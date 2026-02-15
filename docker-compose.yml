@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   ping-bot:
     build: .
@@ -6,6 +8,7 @@ services:
     restart: always
     environment:
       - BOT_MODE=prod # Продакшн режим
+      - TZ=Europe/Kyiv
     env_file:
       - .env
     volumes:

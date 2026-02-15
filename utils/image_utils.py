@@ -44,18 +44,29 @@ def create_summary_image(
 
             # 1. Text Font (Prioritize reliable Cyrillic)
             text_font_paths = [
+                # Linux fonts (Docker/Ubuntu priority)
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                # Windows fonts
                 "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/segoeui.ttf",
                 "C:/Windows/Fonts/calibri.ttf",
                 "arial.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             ]
             text_font = load_font(text_font_paths, font_size)
 
             # 2. Emoji Font (Prioritize Symbols)
             emoji_font_paths = [
-                "C:/Windows/Fonts/seguisym.ttf",  # Segoe UI Symbol
+                # Linux emoji fonts
+                "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+                "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                # Windows fonts
                 "C:/Windows/Fonts/seguiemj.ttf",  # Segoe UI Emoji
+                "C:/Windows/Fonts/seguisym.ttf",  # Segoe UI Symbol
                 "C:/Windows/Fonts/segoeui.ttf",
             ]
             emoji_font = load_font(emoji_font_paths, font_size)
@@ -129,7 +140,11 @@ def create_summary_image(
             # v3.0.0: Move text block lower (75% height instead of 50%)
             current_y = (height * 0.75) - (total_text_height / 2)
             padding = 20
-            max_width = max([l["w"] for l in processed_lines]) if processed_lines else 0
+            max_width = (
+                max([line_data["w"] for line_data in processed_lines])
+                if processed_lines
+                else 0
+            )
 
             bg_left = (width - max_width) / 2 - padding
             bg_top = current_y - padding
