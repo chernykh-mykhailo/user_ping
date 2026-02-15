@@ -243,7 +243,7 @@ class PingHandler(BaseHandler):
         watermark = parts[1].strip() if len(parts) > 1 else None
 
         clean_chat_id = get_clean_chat_id(chat_id)
-        self.chat_repo.set_setting(clean_chat_id, "sticker_watermark", watermark)
+        self.chat_repo.set_setting(clean_chat_id, "summary_watermark", watermark)
 
         if watermark:
             await message.reply(
@@ -880,9 +880,15 @@ class PingHandler(BaseHandler):
         if not users:
             return
 
-        # v2.10.6: Завжди використовуємо емодзі для підтримки кастомних емодзі + показуємо імена
+        # v2.10.20: Отримуємо налаштування типу /all з бази
+        all_ping_emoji = self.chat_repo.get_setting(chat_id, "all_ping_emoji", False)
+
+        # Якщо all_ping_emoji=True -> Тільки емодзі (show_names=False)
+        # Якщо all_ping_emoji=False -> Імена + емодзі (show_names=True)
+        show_names = not all_ping_emoji
+
         await self._send_pings(
-            message.chat.id, users, call_text, use_emoji=True, show_names=True
+            message.chat.id, users, call_text, use_emoji=True, show_names=show_names
         )
         # Чистимо саму команду
         await self.auto_cleanup(message)
