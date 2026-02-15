@@ -253,7 +253,8 @@ class AdminHandler(BaseHandler):
                 self.logger.info(
                     f"Санітизація: Очищено {cleaned_count} імен у чаті {chat_id}"
                 )
-                self.chat_repo.storage.save(self.chat_repo.storage.load())
+                # Зберігаємо оновлені дані (force=True для негайного запису на диск)
+                self.chat_repo.storage.save(self.chat_repo.storage.load(), force=True)
 
         except Exception as e:
             self.logger.error(f"General sync error: {e}")
