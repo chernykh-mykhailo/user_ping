@@ -60,7 +60,6 @@ def create_summary_image(
                 "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
                 "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-                "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
                 # Windows fonts
                 "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/arialbd.ttf",

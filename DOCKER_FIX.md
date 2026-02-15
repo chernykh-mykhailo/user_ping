@@ -42,13 +42,12 @@ Docker образ тепер включає:
 - `fonts-liberation` + `fonts-liberation2` - Liberation Sans (запасний)
 - `fonts-noto-core` - Noto Sans (додатковий)
 - `fonts-freefont-ttf` - FreeSans (додатковий)
-- `fonts-ubuntu` - Ubuntu (додатковий)
 
 **Примітка:** Color emoji fonts не використовуються, бо PIL погано їх підтримує на Linux.
 
 ## Пріоритет шрифтів
 **Для тексту та емодзі (однаковий список):**
-1. **Linux** (для Docker): DejaVu Sans → Liberation Sans → Noto Sans → FreeSans → Ubuntu
+1. **Linux** (для Docker): DejaVu Sans → Liberation Sans → Noto Sans → FreeSans
 2. **Windows** (для локальної розробки): Arial → Segoe UI → Calibri
 
 **Розмір:**
