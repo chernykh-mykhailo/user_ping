@@ -143,6 +143,11 @@ class UserHandler(BaseHandler):
         self.router.message(Command("setemoji"))(self.cmd_set_emoji)
         self.router.message(F.text.startswith("!setemoji"))(self.cmd_set_emoji)
 
+        # v2.10.19: Admin forced actions
+        self.router.message(Command("chat_reg"))(self.cmd_chat_reg)
+        self.router.message(Command("force_unreg"))(self.cmd_force_unreg)
+        self.router.message(Command("force_reg"))(self.cmd_force_reg)
+
     async def on_user_join(self, event: ChatMemberUpdated):
         """Додає користувача в базу, коли він входить в чат"""
         if event.new_chat_member.user.is_bot:
@@ -1010,6 +1015,125 @@ class UserHandler(BaseHandler):
             )
         else:
             sent = await message.answer("ℹ️ Ви і так отримували глобальні пінги.")
+
+        await self.auto_cleanup(message, sent)
+
+    async def cmd_chat_reg(self, message: Message):
+        """Регає весь чат (тільки для власника чату або адмінів бота)"""
+        user_id = message.from_user.id
+        from utils.helpers import get_clean_chat_id
+
+        chat_id = get_clean_chat_id(message.chat.id)
+
+        # Check permission: Bot Admin/Owner OR Chat Owner
+        is_bot_staff = self.chat_repo.is_bot_admin(user_id)
+
+        # Check if user is chat owner
+        chat_member = await message.chat.get_member(user_id)
+        is_chat_owner = chat_member.status == "creator"
+
+        if not (is_bot_staff or is_chat_owner):
+            sent = await message.answer(
+                "❌ Ця команда тільки для <b>Власника чату</b> або <b>Адміністрації бота</b>.",
+                parse_mode="HTML",
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        count = self.chat_repo.clear_chat_unreg(chat_id)
+
+        if count > 0:
+            sent = await message.answer(
+                f"✅ <b>Учасників зареєстровано!</b>\n\n"
+                f"Успішно повернуто в стрій: <b>{count}</b> користувачів.\n",
+                parse_mode="HTML",
+            )
+        else:
+            sent = await message.answer(
+                "ℹ️ У цьому чаті немає активних тимчасових анрегів."
+            )
+
+        await self.auto_cleanup(message, sent)
+
+    async def cmd_force_unreg(self, message: Message):
+        """Примусово анрегає юзера (тільки для власника чату або адмінів бота)"""
+        user_id = message.from_user.id
+        from utils.helpers import get_clean_chat_id
+
+        chat_id = get_clean_chat_id(message.chat.id)
+
+        # Check permission: Bot Admin/Owner OR Chat Owner
+        is_bot_staff = self.chat_repo.is_bot_admin(user_id)
+        chat_member = await message.chat.get_member(user_id)
+        is_chat_owner = chat_member.status == "creator"
+
+        if not (is_bot_staff or is_chat_owner):
+            sent = await message.answer(
+                "❌ Ця команда тільки для <b>Власника чату</b> або <b>Адміністрації бота</b>.",
+                parse_mode="HTML",
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        if not message.reply_to_message:
+            sent = await message.answer(
+                "ℹ️ Використовуйте команду як <b>відповідь</b> на повідомлення юзера, якого треба анрегнути."
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        target_id = str(message.reply_to_message.from_user.id)
+        target_name = message.reply_to_message.from_user.full_name
+
+        self.chat_repo.add_to_temp_unreg(chat_id, target_id)
+        sent = await message.answer(
+            f"🔇 Користувача <b>{target_name}</b> примусово анрегнуто в цьому чаті.",
+            parse_mode="HTML",
+        )
+        await self.auto_cleanup(message, sent)
+
+    async def cmd_force_reg(self, message: Message):
+        """Примусово регає юзера (тільки для власника чату або адмінів бота)"""
+        user_id = message.from_user.id
+        from utils.helpers import get_clean_chat_id
+
+        chat_id = get_clean_chat_id(message.chat.id)
+
+        # Check permission: Bot Admin/Owner OR Chat Owner
+        is_bot_staff = self.chat_repo.is_bot_admin(user_id)
+        chat_member = await message.chat.get_member(user_id)
+        is_chat_owner = chat_member.status == "creator"
+
+        if not (is_bot_staff or is_chat_owner):
+            sent = await message.answer(
+                "❌ Ця команда тільки для <b>Власника чату</b> або <b>Адміністрації бота</b>.",
+                parse_mode="HTML",
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        if not message.reply_to_message:
+            sent = await message.answer(
+                "ℹ️ Використовуйте команду як <b>відповідь</b> на повідомлення юзера, якого треба зареєструвати."
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        target_id = str(message.reply_to_message.from_user.id)
+        target_name = message.reply_to_message.from_user.full_name
+
+        removed = self.chat_repo.remove_from_unreg(chat_id, target_id)
+
+        if removed:
+            sent = await message.answer(
+                f"🔔 Користувача <b>{target_name}</b> примусово зареєстровано в цьому чаті.",
+                parse_mode="HTML",
+            )
+        else:
+            sent = await message.answer(
+                f"ℹ️ Користувач <b>{target_name}</b> і так має активні пінги (або має глобальний анрег).",
+                parse_mode="HTML",
+            )
 
         await self.auto_cleanup(message, sent)
 

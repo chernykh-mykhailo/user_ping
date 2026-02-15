@@ -44,6 +44,8 @@ class UnregDomain:
             data[chat_id]["super_unreg"].remove(user_id)
         if user_id in data[chat_id].get("super_puper_unreg", []):
             data[chat_id]["super_puper_unreg"].remove(user_id)
+        if user_id in data[chat_id].get("local_reg", []):
+            data[chat_id]["local_reg"].remove(user_id)
 
         if user_id not in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].append(user_id)
@@ -70,12 +72,16 @@ class UnregDomain:
             data[chat_id]["super_unreg"] = []
         if "super_puper_unreg" not in data[chat_id]:
             data[chat_id]["super_puper_unreg"] = []
+        if "local_reg" not in data[chat_id]:
+            data[chat_id]["local_reg"] = []
 
         # Remove from temp or super_puper
         if user_id in data[chat_id].get("temp_unreg", []):
             data[chat_id]["temp_unreg"].remove(user_id)
         if user_id in data[chat_id].get("super_puper_unreg", []):
             data[chat_id]["super_puper_unreg"].remove(user_id)
+        if user_id in data[chat_id].get("local_reg", []):
+            data[chat_id]["local_reg"].remove(user_id)
 
         if user_id not in data[chat_id].get("super_unreg", []):
             data[chat_id]["super_unreg"].append(user_id)
@@ -109,6 +115,9 @@ class UnregDomain:
 
         if user_id not in data[chat_id]["super_puper_unreg"]:
             data[chat_id]["super_puper_unreg"].append(user_id)
+            # Remove from local_reg
+            if user_id in data[chat_id].get("local_reg", []):
+                data[chat_id]["local_reg"].remove(user_id)
             self.storage.save(data, force=True)
             return True
         return False
@@ -165,6 +174,20 @@ class UnregDomain:
         if user_id in data[chat_id].get("super_puper_unreg", []):
             data[chat_id]["super_puper_unreg"].remove(user_id)
             removed = True
+
+        # v2.10.18: Handle local_reg override for global unreg on /reg
+        glob_status = self.is_globally_unreg(user_id)
+        if glob_status["temp"] or glob_status["super"]:
+            if "local_reg" not in data[chat_id]:
+                data[chat_id]["local_reg"] = []
+            if user_id not in data[chat_id]["local_reg"]:
+                data[chat_id]["local_reg"].append(user_id)
+                removed = True
+        else:
+            # If not globally unregged, no need for local_reg entry
+            if user_id in data[chat_id].get("local_reg", []):
+                data[chat_id]["local_reg"].remove(user_id)
+                removed = True
 
         if removed:
             self.storage.save(data, force=True)  # Force immediate disk write
@@ -253,9 +276,6 @@ class UnregDomain:
     def remove_from_global_unreg(self, user_id: str) -> bool:
         """
         Removes user from ALL global unreg lists
-
-        Returns:
-            True if removed, False if wasn't in global unreg
         """
         user_id = str(user_id)
         data = self.storage.load()
@@ -271,8 +291,15 @@ class UnregDomain:
             data["global_unreg"]["super"].remove(user_id)
             removed = True
 
+        # v2.10.18: Clean up local_reg overrides across all chats
+        for cid, cdata in data.items():
+            if isinstance(cdata, dict) and "local_reg" in cdata:
+                if user_id in cdata["local_reg"]:
+                    cdata["local_reg"].remove(user_id)
+                    removed = True
+
         if removed:
-            self.storage.save(data, force=True)  # Force immediate disk write
+            self.storage.save(data, force=True)
         return removed
 
     def is_globally_unreg(self, user_id: str) -> Dict[str, bool]:
@@ -310,8 +337,16 @@ class UnregDomain:
 
         global_unreg = set(map(str, data.get("global_unreg", {}).get("temp", [])))
         global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
+        local_reg = set(map(str, chat_data.get("local_reg", [])))
 
-        return temp_unreg, super_unreg, super_puper, global_unreg, global_super
+        return (
+            temp_unreg,
+            super_unreg,
+            super_puper,
+            global_unreg,
+            global_super,
+            local_reg,
+        )
 
     # === Command Limiting (v2.7.0) ===
 
@@ -371,10 +406,6 @@ class UnregDomain:
     def clear_temp_unreg_for_user(self, user_id: str) -> int:
         """
         Clears temp unreg from global AND specific chat (called when user sends message)
-        NOTE: This is called by ActivityMiddleware, not by user commands
-
-        Returns:
-            Number of lists cleared from
         """
         user_id = str(user_id)
         data = self.storage.load()
@@ -385,8 +416,13 @@ class UnregDomain:
             data["global_unreg"]["temp"].remove(user_id)
             cleared_count += 1
 
-        # Note: We don't clear from chat-specific temp here because we don't know which chat
-        # That's handled in save_user_activity when update_unreg=True
+            # v2.10.18: If no longer globally unregged, clean up local overrides
+            is_global_super = user_id in data.get("global_unreg", {}).get("super", [])
+            if not is_global_super:
+                for cid, cdata in data.items():
+                    if isinstance(cdata, dict) and "local_reg" in cdata:
+                        if user_id in cdata["local_reg"]:
+                            cdata["local_reg"].remove(user_id)
 
         if cleared_count > 0:
             self.storage.save(data)
@@ -407,3 +443,20 @@ class UnregDomain:
             data[chat_id] = {}
         data[chat_id]["unreg_denied_message"] = message
         self.storage.save(data, force=True)
+
+    def clear_chat_unreg(self, chat_id: str) -> int:
+        """
+        Registers all users in the chat EXCEPT those with super_unreg/super_puper
+        (Used for /chat_reg command by admins)
+        """
+        data = self.storage.load()
+        if chat_id not in data:
+            return 0
+
+        count = 0
+        if "temp_unreg" in data[chat_id]:
+            count = len(data[chat_id]["temp_unreg"])
+            data[chat_id]["temp_unreg"] = []
+            self.storage.save(data, force=True)
+
+        return count

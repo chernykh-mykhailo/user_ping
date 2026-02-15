@@ -175,6 +175,9 @@ class ChatRepository:
     def clear_all_unreg_in_chat(self, chat_id: str, exclude_super: bool = False) -> int:
         return self.unreg.clear_all_unreg_in_chat(chat_id, exclude_super)
 
+    def clear_chat_unreg(self, chat_id: str) -> int:
+        return self.unreg.clear_chat_unreg(chat_id)
+
     def add_to_unreg_whitelist(self, chat_id: str, user_id: str) -> bool:
         return self.unreg.add_to_unreg_whitelist(chat_id, user_id)
 

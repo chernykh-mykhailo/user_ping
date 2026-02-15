@@ -186,9 +186,14 @@ class PingBot:
             BotCommand(command="superunreg", description="🚫 Вимкнути пінг (Premium)"),
             BotCommand(command="spanreg", description="🚫 SuperUnreg (alias)"),
             BotCommand(command="reg", description="🔔 Увімкнути пінг"),
+            BotCommand(command="chat_reg", description="👮 Реєстрація чату (Admin)"),
             BotCommand(command="gunreg", description="🌍 Глобальний анрег (всі чати)"),
             BotCommand(command="gsuperunreg", description="👑 Глобальний SuperUnreg"),
             BotCommand(command="greg", description="🔔 Глобальний рег"),
+            BotCommand(
+                command="force_unreg", description="👮 Примусовий анрег (Reply)"
+            ),
+            BotCommand(command="force_reg", description="🔔 Примусовий рег (Reply)"),
             BotCommand(
                 command="setemoji",
                 description="🎭 Встановити персональний емодзі (Premium)",

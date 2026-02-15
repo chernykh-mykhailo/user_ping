@@ -153,18 +153,9 @@ class UserActivityDomain:
         all_users_raw = chat_data.get("users", {})
 
         # Get unreg sets (delegating to UnregDomain would be circular, so we read directly)
-        temp_unreg, super_unreg, global_unreg, global_super, super_puper = (
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper, local_reg = (
             self._get_unreg_sets(chat_id)
         )
-
-        # DEBUG: Log unreg info
-        logger.info(f"[UNREG DEBUG] chat_id={chat_id}")
-        logger.info(f"[UNREG DEBUG] temp_unreg={temp_unreg}")
-        logger.info(f"[UNREG DEBUG] super_unreg={super_unreg}")
-        logger.info(f"[UNREG DEBUG] super_puper={super_puper}")
-        logger.info(f"[UNREG DEBUG] global_unreg={global_unreg}")
-        logger.info(f"[UNREG DEBUG] global_super={global_super}")
-        logger.info(f"[UNREG DEBUG] total_users={len(all_users_raw)}")
 
         # Filter unregs
         active_list = []
@@ -173,13 +164,14 @@ class UserActivityDomain:
         ghost_threshold = now_dt - timedelta(days=30)
 
         for uid, val in all_users_raw.items():
-            if (
-                uid in temp_unreg
-                or uid in super_unreg
-                or uid in global_unreg
-                or uid in global_super
-                or uid in super_puper
-            ):
+            # v2.10.18: Logic for being filtered out
+            is_local_unreg = (
+                uid in temp_unreg or uid in super_unreg or uid in super_puper
+            )
+            is_global_unreg = uid in global_unreg or uid in global_super
+
+            # User is unregged if they have local unreg OR (global unreg AND NO local reg override)
+            if is_local_unreg or (is_global_unreg and uid not in local_reg):
                 filtered_count += 1
                 continue
 
@@ -243,7 +235,7 @@ class UserActivityDomain:
         chat_data = self._get_chat_data(chat_id)
         all_users_raw = chat_data.get("users", {})
 
-        temp_unreg, super_unreg, global_unreg, global_super, super_puper = (
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper, local_reg = (
             self._get_unreg_sets(chat_id)
         )
 
@@ -253,13 +245,12 @@ class UserActivityDomain:
         ghost_threshold = now_dt - timedelta(days=30)
 
         for uid, val in all_users_raw.items():
-            if (
-                uid in temp_unreg
-                or uid in super_unreg
-                or uid in global_unreg
-                or uid in global_super
-                or uid in super_puper
-            ):
+            is_local_unreg = (
+                uid in temp_unreg or uid in super_unreg or uid in super_puper
+            )
+            is_global_unreg = uid in global_unreg or uid in global_super
+
+            if is_local_unreg or (is_global_unreg and uid not in local_reg):
                 continue
 
             # Handle both old and new format
@@ -313,7 +304,7 @@ class UserActivityDomain:
         chat_data = self._get_chat_data(chat_id)
         all_users = chat_data.get("users", {})
 
-        temp_unreg, super_unreg, global_unreg, global_super, super_puper = (
+        temp_unreg, super_unreg, global_unreg, global_super, super_puper, local_reg = (
             self._get_unreg_sets(chat_id)
         )
 
@@ -321,13 +312,12 @@ class UserActivityDomain:
         result = {}
 
         for uid, val in all_users.items():
-            if (
-                uid in temp_unreg
-                or uid in super_unreg
-                or uid in global_unreg
-                or uid in global_super
-                or uid in super_puper
-            ):
+            is_local_unreg = (
+                uid in temp_unreg or uid in super_unreg or uid in super_puper
+            )
+            is_global_unreg = uid in global_unreg or uid in global_super
+
+            if is_local_unreg or (is_global_unreg and uid not in local_reg):
                 continue
 
             if not isinstance(val, dict):
@@ -380,8 +370,8 @@ class UserActivityDomain:
 
     def _get_unreg_sets(self, chat_id: str) -> tuple:
         """
-        Internal: Returns all 5 unreg sets as string sets
-        (temp_unreg, super_unreg, global_temp, global_super, super_puper)
+        Internal: Returns all 6 unreg sets as string sets
+        (temp_unreg, super_unreg, global_temp, global_super, super_puper, local_reg)
         """
         data = self.storage.load()
         chat_data = data.get(chat_id, {})
@@ -389,8 +379,16 @@ class UserActivityDomain:
         temp_unreg = set(map(str, chat_data.get("temp_unreg", [])))
         super_unreg = set(map(str, chat_data.get("super_unreg", [])))
         super_puper = set(map(str, chat_data.get("super_puper_unreg", [])))
+        local_reg = set(map(str, chat_data.get("local_reg", [])))
 
         global_unreg = set(map(str, data.get("global_unreg", {}).get("temp", [])))
         global_super = set(map(str, data.get("global_unreg", {}).get("super", [])))
 
-        return temp_unreg, super_unreg, global_unreg, global_super, super_puper
+        return (
+            temp_unreg,
+            super_unreg,
+            global_unreg,
+            global_super,
+            super_puper,
+            local_reg,
+        )
