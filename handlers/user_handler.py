@@ -718,7 +718,14 @@ class UserHandler(BaseHandler):
 
                 safe_quote = escape(quote)
 
-                text = f"🔕 <b>{name}</b> анрегнувся зі словами:\n<i>{safe_quote}</i>"
+                # v2.10.17: Додаємо емодзі юзера, якщо є
+                user_emoji = self.chat_repo.get_user_setting(
+                    user_id, "personal_emoji", ""
+                )
+                emoji_html = render_emoji(user_emoji) if user_emoji else ""
+                emoji_prefix = f"{emoji_html} " if emoji_html else ""
+
+                text = f"🔕 {emoji_prefix}<b>{name}</b> анрегнувся зі словами:\n<i>{safe_quote}</i>"
                 sent = await message.answer(text, parse_mode="HTML")
 
                 # Check chat setting for cleanup (default: False - keep quote)
@@ -735,10 +742,21 @@ class UserHandler(BaseHandler):
                     except:
                         pass
             else:
-                sent = await self._safe_answer(
-                    message,
-                    "🔕 Пінги вимкнено. Напишіть будь-що в чат, щоб увімкнути назад.",
+                user_emoji = self.chat_repo.get_user_setting(
+                    user_id, "personal_emoji", ""
                 )
+                emoji_html = render_emoji(user_emoji) if user_emoji else ""
+                emoji_prefix = f"{emoji_html} " if emoji_html else ""
+
+                name = get_user_name(
+                    message.from_user.first_name,
+                    message.from_user.last_name,
+                    message.from_user.username,
+                    message.from_user.id,
+                )
+
+                text = f"🔕 {emoji_prefix}<b>{name}</b>: пінги вимкнено.\n<i>Напишіть будь-що в чат, щоб увімкнути назад.</i>"
+                sent = await self._safe_answer(message, text, parse_mode="HTML")
                 await self.auto_cleanup(message, sent)
         else:
             sent = await self._safe_answer(
@@ -799,8 +817,21 @@ class UserHandler(BaseHandler):
         added = self.chat_repo.add_to_super_unreg(chat_id, user_id)
 
         if added:
+            user_emoji = self.chat_repo.get_user_setting(user_id, "personal_emoji", "")
+            from utils.helpers import render_emoji, get_user_name
+
+            emoji_html = render_emoji(user_emoji) if user_emoji else ""
+            emoji_prefix = f"{emoji_html} " if emoji_html else ""
+
+            name = get_user_name(
+                message.from_user.first_name,
+                message.from_user.last_name,
+                message.from_user.username,
+                message.from_user.id,
+            )
+
             sent = await message.answer(
-                "🛡 <b>SUPER UNREG: АКТИВОВАНО</b>\n\n"
+                f"🛡 {emoji_prefix}<b>{name}</b>: SUPER UNREG АКТИВОВАНО\n\n"
                 "💎 Ви успішно використали свій <b>Premium</b> статус. Тепер учасники не зможуть пінгнути вас у цьому чаті, навіть якщо ви будете активні.\n\n"
                 "<i>Повернутися: /reg</i>",
                 parse_mode="HTML",
