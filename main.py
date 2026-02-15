@@ -189,6 +189,10 @@ class PingBot:
             BotCommand(command="gunreg", description="🌍 Глобальний анрег (всі чати)"),
             BotCommand(command="gsuperunreg", description="👑 Глобальний SuperUnreg"),
             BotCommand(command="greg", description="🔔 Глобальний рег"),
+            BotCommand(
+                command="setemoji",
+                description="🎭 Встановити персональний емодзі (Premium)",
+            ),
         ]
 
         try:

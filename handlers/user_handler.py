@@ -1034,14 +1034,21 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
+        # v2.10.16: Перевірка преміуму на самому початку
+        is_premium = self.premium_repo.has_premium(message.from_user.id)
+        if not is_premium:
+            sent = await message.answer(
+                l10n.format_value("emoji_pack.no_premium"), parse_mode="HTML"
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
         from utils.helpers import extract_emoji_info, render_emoji
 
         # 1. Спроба витягти преміум-емодзі або звичайний
         info = extract_emoji_info(message)
         custom_id = info.get("custom_id")
         emoji_val = info.get("emoji")
-
-        print(f"[SETEMOJI] Info: custom_id={custom_id}, emoji={emoji_val}")
 
         if custom_id:
             msg_status = await message.answer(
@@ -1051,7 +1058,7 @@ class UserHandler(BaseHandler):
             # ВАЖЛИВО: Бот може використовувати будь-які преміум-емодзі в повідомленнях,
             # навіть якщо вони не з його паку. Тому просто зберігаємо оригінальний ID.
             try:
-                print(f"[SETEMOJI] Saving original emoji ID: {custom_id}")
+                print("[SETEMOJI] Saving original emoji ID:", custom_id)
 
                 # Перевіряємо, чи ВЛАСНИК бота має Premium (не сам бот!)
                 from config import ADMIN_USER_ID
@@ -1190,13 +1197,6 @@ class UserHandler(BaseHandler):
                     parse_mode="HTML",
                 )
                 return
-
-            # Якщо не преміум
-            sent = await message.answer(
-                l10n.format_value("emoji_pack.no_premium"), parse_mode="HTML"
-            )
-            await self.auto_cleanup(message, sent)
-            return
 
         emoji = emoji_val.strip()
 
