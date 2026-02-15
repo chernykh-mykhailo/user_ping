@@ -13,9 +13,11 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     CallbackQuery,
+    MessageEntity,
+    User,
 )
 from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id
+from utils.helpers import get_clean_chat_id, render_emoji, extract_custom_emoji_id
 
 from config import PING_LIMITS, EMOJIS, ADMIN_USER_ID
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
@@ -283,7 +285,12 @@ class PingHandler(BaseHandler):
         return admin_users
 
     async def _send_pings(
-        self, chat_id: int, users: dict, call_text: str, use_emoji: bool = False
+        self,
+        chat_id: int,
+        users: dict,
+        call_text: str,
+        use_emoji: bool = False,
+        show_names: bool = False,
     ):
         """
         Відправляє пінги групами з підтримкою зупинки
@@ -486,15 +493,35 @@ class PingHandler(BaseHandler):
                     #     asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
                     # except: pass
 
+                # Зберігаємо ім'я користувача до того, як label буде перезаписано емодзі
+                user_name = label
+
                 if use_emoji:
                     personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
-                    label = personal if personal else random.choice(EMOJIS)
+                    emoji_label = personal if personal else random.choice(EMOJIS)
+                    print(
+                        f"[PING] User {uid}: personal={personal}, emoji={emoji_label}, name={user_name}"
+                    )
 
-                # v2.9.0: Fix for special characters in names breaking HTML
-                import html
+                    # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
+                    if str(emoji_label).startswith("tg-emoji:"):
+                        emoji_id = emoji_label.split(":")[1]
+                        print(f"[PING] Premium emoji detected! ID={emoji_id}")
+                        # Зберігаємо: (type, emoji_id, uid, user_name)
+                        mentions.append(("custom_emoji", emoji_id, uid, user_name))
+                    else:
+                        import html
 
-                safe_label = html.escape(str(label))
-                mentions.append(f'<a href="tg://user?id={uid}">{safe_label}</a>')
+                        safe_emoji = html.escape(str(emoji_label))
+                        print(f"[PING] Regular emoji: safe_emoji={safe_emoji}")
+                        mentions.append(("regular", safe_emoji, uid, user_name))
+                else:
+                    # v2.9.0: Fix for special characters in names breaking HTML
+                    import html
+
+                    safe_label = html.escape(str(label))
+                    # Зберігаємо як tuple для сумісності з новою логікою
+                    mentions.append(("text", safe_label, uid, user_name))
 
             try:
                 # Визначаємо чи потрібна кнопка стоп
@@ -525,18 +552,120 @@ class PingHandler(BaseHandler):
                     count_text = f" (👥 {len(user_ids)})"
 
                 # Відправляємо повідомлення з повторами при FloodControl (v1.6.5)
+                # Helper: UTF-16 довжина для Telegram entities
+                def utf16_len(text: str) -> int:
+                    return len(text.encode("utf-16-le")) // 2
+
                 sent_message = None
                 while not sent_message:
                     try:
+                        # v2.10.7: Використовуємо MessageEntity для кастомних емодзі
+                        text_parts = [f"{call_text}{count_text}\n\n"]
+                        entities = []
+                        current_offset = utf16_len(text_parts[0])
+
+                        for mention_data in mentions:
+                            if not isinstance(mention_data, tuple):
+                                continue
+
+                            if mention_data[0] == "custom_emoji":
+                                emoji_id = mention_data[1]
+                                uid = mention_data[2]
+                                user_name = (
+                                    mention_data[3] if len(mention_data) > 3 else "✨"
+                                )
+
+                                # Додаємо placeholder для custom_emoji
+                                emoji_placeholder = "✨"
+                                text_parts.append(emoji_placeholder)
+                                entities.append(
+                                    MessageEntity(
+                                        type="custom_emoji",
+                                        offset=current_offset,
+                                        length=utf16_len(emoji_placeholder),
+                                        custom_emoji_id=emoji_id,
+                                    )
+                                )
+                                current_offset += utf16_len(emoji_placeholder)
+
+                                # Додаємо ім'я (якщо show_names=True)
+                                if show_names:
+                                    text_parts.append(" ")
+                                    current_offset += 1
+
+                                    mention_text = user_name
+                                    text_parts.append(mention_text)
+                                    entities.append(
+                                        MessageEntity(
+                                            type="text_mention",
+                                            offset=current_offset,
+                                            length=utf16_len(mention_text),
+                                            user=User(
+                                                id=int(uid),
+                                                is_bot=False,
+                                                first_name=user_name,
+                                            ),
+                                        )
+                                    )
+                                    current_offset += utf16_len(mention_text)
+
+                                text_parts.append(" ")
+                                current_offset += 1
+                            else:
+                                # Звичайний емодзі
+                                emoji_text = mention_data[1]
+                                uid = mention_data[2]
+                                user_name = (
+                                    mention_data[3] if len(mention_data) > 3 else "✨"
+                                )
+
+                                if show_names:
+                                    # Емодзі + ім'я
+                                    text_parts.append(emoji_text)
+                                    current_offset += utf16_len(emoji_text)
+
+                                    text_parts.append(" ")
+                                    current_offset += 1
+
+                                    mention_text = user_name
+                                    text_parts.append(mention_text)
+                                    entities.append(
+                                        MessageEntity(
+                                            type="text_mention",
+                                            offset=current_offset,
+                                            length=utf16_len(mention_text),
+                                            user=User(
+                                                id=int(uid),
+                                                is_bot=False,
+                                                first_name=user_name,
+                                            ),
+                                        )
+                                    )
+                                    current_offset += utf16_len(mention_text)
+
+                                    text_parts.append(" ")
+                                    current_offset += 1
+                                else:
+                                    # Тільки емодзі без mention
+                                    text_parts.append(emoji_text)
+                                    current_offset += utf16_len(emoji_text)
+
+                                    text_parts.append(" ")
+                                    current_offset += 1
+
+                        full_message = "".join(text_parts).rstrip() + footer_text
+
+                        print(f"DEBUG: Відправляю повідомлення:\n{full_message}")
+                        print(f"DEBUG: Entities: {entities}")
+
                         sent_message = await self.bot.send_message(
                             chat_id,
-                            f"<b>{call_text}{count_text}</b>\n\n"
-                            + " ".join(mentions)
-                            + footer_text,
-                            parse_mode="HTML",
+                            full_message,
+                            entities=entities,
                             reply_markup=keyboard,
                             disable_notification=silent_mode,
                         )
+
                     except Exception as e:
                         if "retry after" in str(e).lower():
                             # Витягуємо час очікування
@@ -567,7 +696,34 @@ class PingHandler(BaseHandler):
                             if self.chat_repo.get_stop_flag(clean_chat_id):
                                 return
                         else:
-                            # Якщо інша помилка - логуємо і пропускаємо чанк
+                            # Якщо помилка "Invalid custom emoji", спробуємо відправити без них
+                            if "invalid custom emoji" in str(e).lower():
+                                self.logger.warning(
+                                    f"Invalid emoji in chunk {i}, retrying without custom tags"
+                                )
+                                # Очищаємо mentions від тегів <tg-emoji>
+                                import re
+
+                                clean_mentions = [
+                                    re.sub(r"<tg-emoji[^>]*>(.*?)</tg-emoji>", r"\1", m)
+                                    for m in mentions
+                                ]
+                                try:
+                                    sent_message = await self.bot.send_message(
+                                        chat_id,
+                                        f"<b>{call_text}{count_text}</b>\n\n"
+                                        + " ".join(clean_mentions)
+                                        + footer_text,
+                                        parse_mode="HTML",
+                                        reply_markup=keyboard,
+                                        disable_notification=silent_mode,
+                                    )
+                                    continue  # Спрацювало!
+                                except Exception as e2:
+                                    self.logger.error(
+                                        f"Failed even without emojis: {e2}"
+                                    )
+
                             self.logger.error(f"Помилка при відправці чанку {i}: {e}")
                             break
 
@@ -729,11 +885,10 @@ class PingHandler(BaseHandler):
         if not users:
             return
 
-        # v2.8.0: Check default ping type setting
-        chat_id_str = get_clean_chat_id(message.chat.id)
-        use_emoji = self.chat_repo.get_setting(chat_id_str, "all_ping_emoji", False)
-
-        await self._send_pings(message.chat.id, users, call_text, use_emoji=use_emoji)
+        # v2.10.6: Завжди використовуємо емодзі для підтримки кастомних емодзі + показуємо імена
+        await self._send_pings(
+            message.chat.id, users, call_text, use_emoji=True, show_names=True
+        )
         # Чистимо саму команду
         await self.auto_cleanup(message)
 
@@ -1099,7 +1254,7 @@ class PingHandler(BaseHandler):
         emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
         trigger_list = "\n".join(
             [
-                f"• <code>!{name}</code> {emojis.get(name, '')}"
+                f"• <code>!{name}</code> {render_emoji(emojis.get(name, ''))}"
                 for name in triggers.keys()
             ]
         )
@@ -1147,7 +1302,7 @@ class PingHandler(BaseHandler):
 
         emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
         info = (
-            f"🎯 <b>Група:</b> !{trigger_name} {emoji}\n"
+            f"🎯 <b>Група:</b> !{trigger_name} {render_emoji(emoji)}\n"
             f"👥 Учасників: {len(user_ids)}\n\n"
             f"<b>Список:</b>\n{user_list}"
         )
@@ -1169,7 +1324,13 @@ class PingHandler(BaseHandler):
             return
 
         trigger_name = match.group(1)
-        emoji = match.group(2).strip() if match.group(2) else None
+
+        # Check for premium emoji
+        custom_id = extract_custom_emoji_id(message)
+        if custom_id:
+            emoji = f"tg-emoji:{custom_id}"
+        else:
+            emoji = match.group(2).strip() if match.group(2) else None
 
         chat_id = get_clean_chat_id(message.chat.id)
 
@@ -1177,8 +1338,9 @@ class PingHandler(BaseHandler):
             # Якщо вказано емодзі - встановлюємо одразу
             if emoji:
                 self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji)
+                display_emoji = render_emoji(emoji)
                 sent = await message.answer(
-                    f"✅ Тригер <code>!{trigger_name}</code> створено з емодзі {emoji}!\n\n"
+                    f"✅ Тригер <code>!{trigger_name}</code> створено з емодзі {display_emoji}!\n\n"
                     f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь на повідомлення)\n"
                     f"Викликати: <code>!{trigger_name}</code>\n"
                     f"Панель реєстрації: <code>!roles_panel</code>",
@@ -1496,25 +1658,35 @@ class PingHandler(BaseHandler):
 
         import re
 
-        match = re.search(r"^!set_role_emoji\s+(\S+)\s+(.+)", message.text)
+        match = re.search(r"^!set_role_emoji\s+(\S+)", message.text)
         if not match:
             await message.answer(
-                "❌ Неправильний формат.\n\n"
-                "Використання: <code>!set_role_emoji назва емодзі</code>\n\n"
-                "Приклад:\n"
-                "<code>!set_role_emoji croco 🐊</code>",
+                "❌ Вкажіть назву тригера.\n\n"
+                "Використання: <code>!set_role_emoji назва емодзі</code>",
                 parse_mode="HTML",
             )
             return
 
         trigger_name = match.group(1)
-        emoji = match.group(2).strip()
+
+        # 1. Спроба витягти преміум-емодзі
+        custom_id = extract_custom_emoji_id(message)
+        if custom_id:
+            emoji = f"tg-emoji:{custom_id}"
+        else:
+            # 2. Розібрати звичайний текст
+            parts = message.text.split(maxsplit=2)
+            if len(parts) < 3:
+                await message.answer("❌ Вкажіть емодзі.")
+                return
+            emoji = parts[2].strip()
 
         chat_id = get_clean_chat_id(message.chat.id)
 
         if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
+            display_emoji = render_emoji(emoji)
             await message.answer(
-                f"✅ Емодзі для тригера <code>!{trigger_name}</code> встановлено: {emoji}\n\n"
+                f"✅ Емодзі для тригера <code>!{trigger_name}</code> встановлено: {display_emoji}\n\n"
                 f"Оновіть панель: <code>!roles_panel</code>",
                 parse_mode="HTML",
             )

@@ -1,0 +1,13 @@
+{
+    "cloning": "🔄 <b>Cloning emoji into our branded pack...</b>",
+    "success": "✅ Personal <b>Premium emoji</b> set!\nIt is now part of our branded pack. ✨",
+    "register_success": "✅ Pack <b>{name}</b> successfully registered!",
+    "choose": "✨ <b>Choose an emoji from our collection:</b>\n\nThese emojis are available to all 👑 Premium bot owners, even if you don't have Telegram Premium.",
+    "no_emojis": "😔 Unfortunately, there are no emojis in our collection yet. You can add them by sending any Premium emoji to the !setemoji command.",
+    "no_premium": "ℹ️ Usage: <code>!setemoji 🍎</code>\n\n✨ <b>Tip:</b> 👑 Premium owners can choose from our collection of animated emojis by using the same command with no parameters!",
+    "admin": {
+        "packs_title": "📦 <b>Bot Emoji Pack Status:</b>",
+        "no_packs": "❌ No packs registered yet.",
+        "register_usage": "ℹ️ Usage: <code>/admin_register_pack name title [count]</code>"
+    }
+}

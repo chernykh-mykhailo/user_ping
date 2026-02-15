@@ -16,6 +16,7 @@ from core.domains import (
     CallGroupsDomain,
     ChatSettingsDomain,
     GlobalConfigDomain,
+    EmojiPackDomain,
 )
 
 
@@ -50,6 +51,7 @@ class ChatRepository:
         self.triggers_groups = CallGroupsDomain(self.storage)
         self.chat_settings = ChatSettingsDomain(self.storage)
         self.global_config = GlobalConfigDomain(self.storage)
+        self.emoji_packs = EmojiPackDomain(self.storage)
 
     # === User Activity (delegates to ActivityDomain) ===
 

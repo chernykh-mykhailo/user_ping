@@ -1,8 +1,10 @@
 """Domains: Business logic organized by responsibility"""
+
 from .users import UserActivityDomain, UnregDomain
 from .staff import StaffRolesDomain
 from .triggers import CustomTriggersDomain, CallGroupsDomain
 from .settings import ChatSettingsDomain, GlobalConfigDomain
+from .emoji_pack import EmojiPackDomain
 
 __all__ = [
     "UserActivityDomain",
@@ -12,4 +14,5 @@ __all__ = [
     "CallGroupsDomain",
     "ChatSettingsDomain",
     "GlobalConfigDomain",
+    "EmojiPackDomain",
 ]

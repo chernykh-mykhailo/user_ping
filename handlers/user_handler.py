@@ -14,7 +14,13 @@ from aiogram.types import (
     ChatMemberUpdated,
 )
 from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id, get_user_name
+from utils.helpers import (
+    get_clean_chat_id,
+    get_user_name,
+    render_emoji,
+    extract_custom_emoji_id,
+)
+from utils.l10n import l10n
 from config import (
     PREMIUM_PLANS,
     CHAT_PREMIUM_PLANS,
@@ -34,7 +40,8 @@ class UserHandler(BaseHandler):
     Single Responsibility: тільки користувацькі команди
     """
 
-    def __init__(self, chat_repo, premium_repo):
+    def __init__(self, chat_repo, premium_repo, emoji_service=None):
+        self.emoji_service = emoji_service
         self.logger = logging.getLogger(__name__)
         super().__init__(chat_repo, premium_repo)
 
@@ -89,6 +96,11 @@ class UserHandler(BaseHandler):
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
         self.router.message(F.text.regexp(r"^\s*!?ганрег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_global_unreg
+        )
+
+        # Set Emoji Callbacks
+        self.router.callback_query(F.data.startswith("set_emoji:"))(
+            self.callback_select_emoji
         )
 
         self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
@@ -257,7 +269,7 @@ class UserHandler(BaseHandler):
         personal_emoji = self.chat_repo.get_user_setting(
             message.from_user.id, "personal_emoji", ""
         )
-        profile_header = f"{personal_emoji} " if personal_emoji else ""
+        profile_header = f"{render_emoji(personal_emoji)} " if personal_emoji else ""
 
         help_text = (
             f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
@@ -389,7 +401,9 @@ class UserHandler(BaseHandler):
                 personal_emoji = self.chat_repo.get_user_setting(
                     callback.from_user.id, "personal_emoji", ""
                 )
-                profile_header = f"{personal_emoji} " if personal_emoji else ""
+                profile_header = (
+                    f"{render_emoji(personal_emoji)} " if personal_emoji else ""
+                )
 
                 help_text = (
                     f"<b>{profile_header}📋 Довідка бота v{__version__}</b>\n\n"
@@ -1019,11 +1033,146 @@ class UserHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
+        # 1. Спроба витягти преміум-емодзі
+        custom_id = extract_custom_emoji_id(message)
+        print(f"[SETEMOJI] Extracted custom_emoji_id: {custom_id}")
+        if custom_id:
+            msg_status = await message.answer(
+                l10n.format_value("emoji_pack.cloning"), parse_mode="HTML"
+            )
+
+            # ВАЖЛИВО: Бот може використовувати будь-які преміум-емодзі в повідомленнях,
+            # навіть якщо вони не з його паку. Тому просто зберігаємо оригінальний ID.
+            try:
+                print(f"[SETEMOJI] Saving original emoji ID: {custom_id}")
+
+                # Перевіряємо, чи ВЛАСНИК бота має Premium (не сам бот!)
+                from config import ADMIN_USER_ID
+
+                owner_has_premium = self.premium_repo.has_premium(ADMIN_USER_ID)
+                print(
+                    f"[SETEMOJI] Bot owner (ID={ADMIN_USER_ID}) premium status: {owner_has_premium}"
+                )
+
+                if not owner_has_premium:
+                    print("[SETEMOJI] ⚠️ WARNING: Bot owner doesn't have Premium!")
+                    await msg_status.edit_text(
+                        "⚠️ <b>Увага!</b>\n\n"
+                        "Власник бота <b>не має Telegram Premium</b>, тому кастомні емодзі "
+                        "<b>не будуть відображатися</b> в пінгах.\n\n"
+                        "Емодзі збережено, але буде показуватися як звичайне ✨.\n\n"
+                        "Щоб кастомні емодзі працювали, потрібно:\n"
+                        "1. Купити Premium для власника бота\n"
+                        "2. Або використовувати звичайні емодзі",
+                        parse_mode="HTML",
+                    )
+                    return
+
+                self.chat_repo.set_user_setting(
+                    message.from_user.id,
+                    "personal_emoji",
+                    f"tg-emoji:{custom_id}",
+                )
+
+                # Також зберігаємо в колекцію для можливості вибору пізніше
+                if self.emoji_service:
+                    try:
+                        stickers = (
+                            await self.emoji_service.bot.get_custom_emoji_stickers(
+                                [custom_id]
+                            )
+                        )
+                        emoji_char = stickers[0].emoji if stickers else "✨"
+                        self.chat_repo.emoji_packs.save_emoji_mapping(
+                            custom_id, custom_id, emoji_char
+                        )
+                    except Exception as e:
+                        print(f"[SETEMOJI] Warning: Could not save to collection: {e}")
+
+                print(f"[SETEMOJI] ✅ Saved successfully!")
+
+                # Формуємо повідомлення з custom emoji в кінці
+                success_text = l10n.format_value("emoji_pack.success")
+                # Додаємо placeholder в кінець
+                success_text += " 🎨"
+
+                # Позиція емодзі — в кінці тексту
+                emoji_pos = len(success_text) - 1
+
+                from aiogram.types import MessageEntity
+
+                entities = [
+                    MessageEntity(
+                        type="custom_emoji",
+                        offset=emoji_pos,
+                        length=1,
+                        custom_emoji_id=custom_id,
+                    )
+                ]
+
+                await msg_status.edit_text(
+                    success_text,
+                    entities=entities,
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                import html
+
+                self.logger.error(f"Error cloning emoji: {e}", exc_info=True)
+                await msg_status.edit_text(
+                    f"❌ Критична помилка при клонуванні:\n<code>{html.escape(str(e))}</code>\n\n"
+                    "Спробуйте пізніше або інший емодзі.",
+                    parse_mode="HTML",
+                )
+            return
+
+        # 2. Якщо просто !setemoji (без аргументів)
         parts = message.text.split(maxsplit=1)
         if len(parts) < 2:
+            # Перевіряємо преміум бота (тільки власники преміуму можуть обирати з колекції)
+            is_premium = self.premium_repo.has_premium(message.from_user.id)
+            if is_premium:
+                emojis = self.chat_repo.emoji_packs.get_all_cloned_emojis()
+                if not emojis:
+                    await message.answer(
+                        l10n.format_value("emoji_pack.no_emojis"), parse_mode="HTML"
+                    )
+                    return
+
+                # Показуємо останніх 40
+                emojis = emojis[-40:]
+
+                text = l10n.format_value("emoji_pack.choose") + "\n\n"
+                kb = []
+                row = []
+                for i, item in enumerate(emojis, 1):
+                    eid = item["id"]
+                    alt = item["alt"]
+                    text += f'<b>{i}.</b> <tg-emoji emoji-id="{eid}">{alt}</tg-emoji>  '
+                    if i % 4 == 0:
+                        text += "\n"
+
+                    row.append(
+                        InlineKeyboardButton(
+                            text=str(i), callback_data=f"set_emoji:{eid}"
+                        )
+                    )
+                    if len(row) == 5:
+                        kb.append(row)
+                        row = []
+                if row:
+                    kb.append(row)
+
+                await message.answer(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+                    parse_mode="HTML",
+                )
+                return
+
+            # Якщо не преміум
             sent = await message.answer(
-                "ℹ️ Використання: <code>!setemoji 🍎</code>\nЩоб видалити: <code>!setemoji none</code>",
-                parse_mode="HTML",
+                l10n.format_value("emoji_pack.no_premium"), parse_mode="HTML"
             )
             await self.auto_cleanup(message, sent)
             return
@@ -1035,8 +1184,8 @@ class UserHandler(BaseHandler):
             await message.answer("✅ Персональний емодзі видалено.")
             return
 
-        # Валідація: не більше 2 символів (для підтримки складних емодзі може бути більше, але обмежимо візуально)
-        if len(emoji) > 5:  # Деякі складні емодзі займають більше ніж 1-2 char в utf-8
+        # Валідація: не більше 10 символів (prev: 5)
+        if len(emoji) > 10:
             await message.answer(
                 "❌ Занадто довгий текст. Будь ласка, використовуйте один емодзі."
             )
@@ -1046,3 +1195,27 @@ class UserHandler(BaseHandler):
         await message.answer(
             f"✅ Персональний емодзі встановлено: {emoji}\nТепер він буде відображатися в /help"
         )
+
+    async def callback_select_emoji(self, callback: CallbackQuery):
+        """Обробляє вибір емодзі з колекції"""
+        emoji_id = callback.data.split(":")[1]
+
+        # Перевіряємо преміум ще раз (про всяк випадок)
+        if not self.premium_repo.has_premium(callback.from_user.id):
+            await callback.answer(
+                "❌ Ця функція тільки для Premium користувачів.", show_alert=True
+            )
+            return
+
+        # Зберігаємо
+        self.chat_repo.set_user_setting(
+            callback.from_user.id, "personal_emoji", f"tg-emoji:{emoji_id}"
+        )
+
+        # Рендеримо для підтвердження
+        emoji_html = render_emoji(f"tg-emoji:{emoji_id}")
+        await callback.message.edit_text(
+            f"✅ Персональний емодзі встановлено: {emoji_html}\nВін буде відображатися біля вашого імені.",
+            parse_mode="HTML",
+        )
+        await callback.answer("Встановлено! ✨")
