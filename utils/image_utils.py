@@ -58,18 +58,10 @@ def create_summary_image(
             ]
             text_font = load_font(text_font_paths, font_size)
 
-            # 2. Emoji Font (Prioritize Symbols)
-            emoji_font_paths = [
-                # Linux emoji fonts
-                "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-                "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                # Windows fonts
-                "C:/Windows/Fonts/seguiemj.ttf",  # Segoe UI Emoji
-                "C:/Windows/Fonts/seguisym.ttf",  # Segoe UI Symbol
-                "C:/Windows/Fonts/segoeui.ttf",
-            ]
-            emoji_font = load_font(emoji_font_paths, font_size)
+            # 2. Emoji Font (використовуємо той самий шрифт, але більший розмір)
+            # PIL погано працює з color emoji fonts на Linux, тому використовуємо звичайний шрифт
+            emoji_font_size = int(font_size * 1.3)  # Трохи більший для емодзі
+            emoji_font = load_font(text_font_paths, emoji_font_size)
             # ---------------------
 
             # Create overlay
