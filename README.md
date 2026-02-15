@@ -125,7 +125,7 @@ docker start ping-bot
 docker restart ping-bot
 ```
 
-**Примітка:** Docker образ включає шрифти DejaVu та Liberation з підтримкою кирилиці для коректної роботи `/set_sticker` на Linux. Емодзі відображаються звичайним шрифтом (збільшеним розміром), бо PIL не підтримує color emoji fonts.
+**Примітка:** Docker образ включає шрифти DejaVu/Liberation для кирилиці та бібліотеку `pilmoji` для рендерингу емодзі як зображень (Twemoji). Емодзі відображаються коректно на всіх платформах.
 
 ### Docker Compose (найпростіший спосіб)
 

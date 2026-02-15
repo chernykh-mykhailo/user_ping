@@ -2,3 +2,4 @@ telethon
 aiogram
 python-dotenv
 Pillow
+pilmoji

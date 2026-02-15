@@ -765,7 +765,7 @@ class PingHandler(BaseHandler):
                     # Generate image
                     output_path = f"data/temp_{clean_chat_id}.webp"
                     watermark = self.chat_repo.get_setting(
-                        clean_chat_id, "sticker_watermark"
+                        clean_chat_id, "summary_watermark"
                     )
                     result_path = create_summary_image(
                         sticker_path, info_lines, output_path, watermark=watermark
@@ -826,6 +826,10 @@ class PingHandler(BaseHandler):
             sticker = message.reply_to_message.sticker
             chat_id = get_clean_chat_id(message.chat.id)
 
+            # Витягуємо текст після команди (водамарка)
+            text_parts = message.text.split(maxsplit=1)
+            watermark = text_parts[1].strip() if len(text_parts) > 1 else None
+
             # Create stickers directory if not exists
             stickers_dir = "data/stickers"
             if not os.path.exists(stickers_dir):
@@ -838,12 +842,15 @@ class PingHandler(BaseHandler):
             # Download
             await self.bot.download(sticker, destination=save_path)
 
-            # Save setting
+            # Save settings
             self.chat_repo.set_setting(chat_id, "summary_sticker", save_path)
+            self.chat_repo.set_setting(chat_id, "summary_watermark", watermark)
 
-            await message.reply(
-                "✅ Стікер встановлено! Тепер він буде використовуватись для підсумків виклику."
-            )
+            msg_text = "✅ Стікер встановлено! Тепер він буде використовуватись для підсумків виклику."
+            if watermark:
+                msg_text += f"\n✍️ Встановлено підпис: {watermark}"
+
+            await message.reply(msg_text)
         except Exception as e:
             self.logger.error(f"Failed to set sticker: {e}")
             await message.reply(f"❌ Помилка при збереженні стікера: {e}")

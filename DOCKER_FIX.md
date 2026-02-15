@@ -36,23 +36,27 @@ docker run -d \
 2. Відповідайте на нього командою `/set_sticker`
 3. Надішліть `/stats` або `/summary` для перевірки
 
-## Встановлені шрифти
+## Встановлені шрифти та бібліотеки
 Docker образ тепер включає:
 - `fonts-dejavu` + `fonts-dejavu-core` + `fonts-dejavu-extra` - DejaVu Sans (основний)
 - `fonts-liberation` + `fonts-liberation2` - Liberation Sans (запасний)
 - `fonts-noto-core` - Noto Sans (додатковий)
 - `fonts-freefont-ttf` - FreeSans (додатковий)
+- **`pilmoji`** - бібліотека для рендерингу емодзі як зображень (Twemoji)
 
-**Примітка:** Color emoji fonts не використовуються, бо PIL погано їх підтримує на Linux.
+**Як працює:**
+- Текст рендериться звичайним шрифтом (DejaVu Sans)
+- Емодзі рендеряться як PNG зображення з Twemoji (Twitter Emoji)
+- `pilmoji` автоматично замінює юнікод емодзі на картинки
 
 ## Пріоритет шрифтів
-**Для тексту та емодзі (однаковий список):**
+**Для тексту:**
 1. **Linux** (для Docker): DejaVu Sans → Liberation Sans → Noto Sans → FreeSans
 2. **Windows** (для локальної розробки): Arial → Segoe UI → Calibri
 
 **Розмір:**
 - Текст: базовий (height/15) - збільшено для кращої читабельності
-- Емодзі: збільшений (базовий × 1.4)
+- Емодзі: автоматично масштабуються pilmoji (×1.2 від базового)
 
 ## Troubleshooting
 
