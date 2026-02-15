@@ -10,7 +10,13 @@ COPY requirements.txt .
 # Встановлюємо системні залежності та шрифти для PIL/Pillow
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
     fonts-liberation \
+    fonts-liberation2 \
+    fonts-noto-core \
+    fonts-freefont-ttf \
+    fonts-ubuntu \
     && rm -rf /var/lib/apt/lists/*
 
 # Встановлюємо бібліотеки

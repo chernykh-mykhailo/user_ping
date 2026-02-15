@@ -32,35 +32,45 @@ def create_summary_image(
 
             # --- Font Loading Helper ---
             def load_font(paths, size):
+                """Завантажує шрифт з першого доступного шляху"""
                 for path in paths:
                     try:
                         if os.path.exists(path):
+                            logger.info(f"[FONT] Loading font: {path} (size={size})")
                             return ImageFont.truetype(path, size)
-                        elif path == "arial.ttf":
-                            return ImageFont.truetype(path, size)
-                    except IOError:
+                    except Exception as e:
+                        logger.warning(f"[FONT] Failed to load {path}: {e}")
                         continue
-                return ImageFont.load_default()
+
+                # Якщо нічого не знайдено - критична помилка
+                logger.error("[FONT] No fonts found! Image will have broken text.")
+                # Повертаємо None замість load_default(), щоб побачити проблему
+                raise FileNotFoundError(f"No fonts available from list: {paths}")
+
+            # Збільшуємо базовий розмір для кращої читабельності
+            font_size = int(height / 15)  # Було /18, тепер /15 (більше)
 
             # 1. Text Font (Prioritize reliable Cyrillic)
             text_font_paths = [
-                # Linux fonts (Docker/Ubuntu priority)
+                # Linux fonts (Docker/Ubuntu priority) - БІЛЬШЕ ВАРІАНТІВ
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
                 "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
                 # Windows fonts
                 "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/arialbd.ttf",
                 "C:/Windows/Fonts/segoeui.ttf",
                 "C:/Windows/Fonts/calibri.ttf",
-                "arial.ttf",
             ]
             text_font = load_font(text_font_paths, font_size)
 
             # 2. Emoji Font (використовуємо той самий шрифт, але більший розмір)
-            # PIL погано працює з color emoji fonts на Linux, тому використовуємо звичайний шрифт
-            emoji_font_size = int(font_size * 1.3)  # Трохи більший для емодзі
+            emoji_font_size = int(font_size * 1.4)  # Було 1.3, тепер 1.4 (ще більше)
             emoji_font = load_font(text_font_paths, emoji_font_size)
             # ---------------------
 
