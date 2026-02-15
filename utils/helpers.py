@@ -90,27 +90,37 @@ def get_clean_chat_id(chat_id: int) -> str:
 def get_user_name(first_name=None, last_name=None, username=None, user_id=None) -> str:
     """
     Повертає найкраще доступне ім'я користувача.
-    Пріоритет: First Name -> Last Name -> Username -> ID -> Користувач
+    v2.10.16: Очищує від емодзі, бере ТІЛЬКИ перше ім'я, обмежує довжину, дозволяє апостроф.
     """
-    name_parts = []
+    import re
 
-    # 1. Спроба об'єднати Ім'я + Прізвище
+    name = ""
+
+    # 1. Пріоритет - First Name
     if first_name and first_name.strip():
-        name_parts.append(first_name.strip())
+        name = first_name.strip()
+    # 2. Якщо немає - Last Name
+    elif last_name and last_name.strip():
+        name = last_name.strip()
+    # 3. Якщо немає - Username
+    elif username and username.strip():
+        name = username.strip().lstrip("@")
+    # 4. Fallback - ID
+    elif user_id:
+        name = str(user_id)
+    else:
+        name = "Користувач"
 
-    if last_name and last_name.strip():
-        name_parts.append(last_name.strip())
+    # ОЧИЩЕННЯ:
+    # а) Видаляємо емодзі та спецсимволи (залишаємо букви, цифри, пробіли та деякі знаки)
+    # Додаємо апострофи: ' (U+0027), ’ (U+2019), ʼ (U+02BC)
+    name = re.sub(r"[^\w\s\.\-\'’ʼ]", "", name)
 
-    if name_parts:
-        return " ".join(name_parts)[:20]  # Обмежуємо довжину для бази
+    # б) Беремо лише перше слово (до першого пробілу)
+    name = name.split()[0] if name.split() else name
 
-    # 2. Якщо немає Імені/Прізвища - беремо Username
-    if username and username.strip():
-        username = username.strip().lstrip("@")
-        return f"@{username}"[:20]
+    # в) Обмежуємо довжину (наприклад, 12 символів)
+    if len(name) > 12:
+        name = name[:11] + "…"
 
-    # 3. Якщо взагалі нічого немає - fallback на ID
-    if user_id:
-        return f"ID:{user_id}"
-
-    return "Користувач"
+    return name.strip() or "Користувач"

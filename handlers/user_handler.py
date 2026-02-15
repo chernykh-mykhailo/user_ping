@@ -1128,17 +1128,18 @@ class UserHandler(BaseHandler):
             # Перевіряємо преміум бота (тільки власники преміуму можуть обирати з колекції)
             is_premium = self.premium_repo.has_premium(message.from_user.id)
             if is_premium:
-                # v2.10.14: Завантажуємо інформацію про бота, якщо її ще немає
-                if not self.me and message.bot:
+                # v2.10.16: Завантажуємо інформацію про бота, якщо її ще немає (Більш надійна перевірка)
+                if not getattr(self, "me", None) and message.bot:
                     self.me = await message.bot.get_me()
 
                 pack = self.chat_repo.emoji_packs.get_active_pack()
-                if pack and self.me:
+                bot_info = getattr(self, "me", None)
+                if pack and bot_info:
                     # v2.10.9: Перевіряємо, чи пак належить поточному боту
                     if (
                         not pack["name"]
                         .lower()
-                        .endswith(f"_by_{self.me.username}".lower())
+                        .endswith(f"_by_{bot_info.username}".lower())
                     ):
                         self.logger.warning(
                             f"Active pack {pack['name']} doesn't match bot {self.me.username}. Ignoring."

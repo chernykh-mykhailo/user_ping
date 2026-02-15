@@ -8,7 +8,7 @@ from aiogram import F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message
 from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id
+from utils.helpers import get_clean_chat_id, get_user_name
 from utils.l10n import l10n
 from userbot.collector import UserbotCollector
 from config import ADMIN_USER_ID, PING_LIMITS, UB_ACCOUNTS
@@ -167,7 +167,12 @@ class AdminHandler(BaseHandler):
             for member in admins:
                 if not member.user.is_bot:
                     user_id = str(member.user.id)
-                    name = member.user.first_name or "Admin"
+                    name = get_user_name(
+                        first_name=member.user.first_name,
+                        last_name=member.user.last_name,
+                        username=member.user.username,
+                        user_id=member.user.id,
+                    )
                     self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
                     admin_count += 1
 
