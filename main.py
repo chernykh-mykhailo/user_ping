@@ -107,7 +107,7 @@ class PingBot:
         self.ping_handler = PingHandler(self.chat_repo, self.premium_repo, self.bot)
 
         self.user_handler = UserHandler(
-            self.chat_repo, self.premium_repo, self.emoji_service
+            self.chat_repo, self.premium_repo, self.emoji_service, self.bot
         )
 
         self.payment_handler = PaymentHandler(

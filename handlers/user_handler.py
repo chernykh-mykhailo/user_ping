@@ -39,8 +39,10 @@ class UserHandler(BaseHandler):
     Single Responsibility: тільки користувацькі команди
     """
 
-    def __init__(self, chat_repo, premium_repo, emoji_service=None):
+    def __init__(self, chat_repo, premium_repo, emoji_service=None, bot=None):
         self.emoji_service = emoji_service
+        self.bot = bot
+        self.me = None  # Встановиться при першому виклику або вручну
         self.logger = logging.getLogger(__name__)
         super().__init__(chat_repo, premium_repo)
 
@@ -1126,8 +1128,12 @@ class UserHandler(BaseHandler):
             # Перевіряємо преміум бота (тільки власники преміуму можуть обирати з колекції)
             is_premium = self.premium_repo.has_premium(message.from_user.id)
             if is_premium:
+                # v2.10.14: Завантажуємо інформацію про бота, якщо її ще немає
+                if not self.me and message.bot:
+                    self.me = await message.bot.get_me()
+
                 pack = self.chat_repo.emoji_packs.get_active_pack()
-                if pack:
+                if pack and self.me:
                     # v2.10.9: Перевіряємо, чи пак належить поточному боту
                     if (
                         not pack["name"]
