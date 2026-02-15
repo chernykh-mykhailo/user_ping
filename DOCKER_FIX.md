@@ -38,33 +38,46 @@ docker run -d \
 
 ## Встановлені шрифти
 Docker образ тепер включає:
-- `fonts-dejavu` - DejaVu Sans (основний для кирилиці та базових символів)
-- `fonts-liberation` - Liberation Sans (запасний варіант)
+- `fonts-dejavu` + `fonts-dejavu-core` + `fonts-dejavu-extra` - DejaVu Sans (основний)
+- `fonts-liberation` + `fonts-liberation2` - Liberation Sans (запасний)
+- `fonts-noto-core` - Noto Sans (додатковий)
+- `fonts-freefont-ttf` - FreeSans (додатковий)
+- `fonts-ubuntu` - Ubuntu (додатковий)
 
-**Примітка:** Color emoji fonts (Noto Emoji) не використовуються, бо PIL погано їх підтримує на Linux. Замість цього емодзі відображаються звичайним шрифтом, але трохи більшим розміром (1.3x).
+**Примітка:** Color emoji fonts не використовуються, бо PIL погано їх підтримує на Linux.
 
 ## Пріоритет шрифтів
 **Для тексту та емодзі (однаковий список):**
-1. **Linux** (для Docker): DejaVu Sans → Liberation Sans → Noto Sans → FreeSans
+1. **Linux** (для Docker): DejaVu Sans → Liberation Sans → Noto Sans → FreeSans → Ubuntu
 2. **Windows** (для локальної розробки): Arial → Segoe UI → Calibri
 
 **Розмір:**
-- Текст: базовий (height/18)
-- Емодзі: збільшений (базовий × 1.3)
+- Текст: базовий (height/15) - збільшено для кращої читабельності
+- Емодзі: збільшений (базовий × 1.4)
 
 ## Troubleshooting
+
+### Перевірка шрифтів у контейнері
+```bash
+# Запустіть тестовий скрипт
+docker exec -it ping_bot python test_fonts.py
+
+# Або перевірте вручну
+docker exec -it ping_bot ls -la /usr/share/fonts/truetype/dejavu/
+docker exec -it ping_bot ls -la /usr/share/fonts/truetype/liberation/
+```
 
 ### Шрифти не встановлюються
 ```bash
 # Увійдіть в контейнер
-docker exec -it ping-bot bash
+docker exec -it ping_bot bash
 
 # Перевірте наявність шрифтів
 ls -la /usr/share/fonts/truetype/dejavu/
 
 # Якщо порожньо - встановіть вручну
 apt-get update
-apt-get install -y fonts-dejavu fonts-liberation
+apt-get install -y fonts-dejavu fonts-dejavu-core fonts-liberation fonts-liberation2
 ```
 
 ### Стікер все ще не працює
