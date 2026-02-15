@@ -186,6 +186,13 @@ class UserbotCollector:
         me = await self.client.get_me()
 
         async for user in self.client.iter_participants(chat_id):
+            # v2.10.22: Перевірка зупинки
+            if self.chat_repo.get_stop_flag(clean_chat_id):
+                self.logger.info(
+                    f"Синхронізацію в чаті {clean_chat_id} зупинено користувачем"
+                )
+                break
+
             if not user.bot:
                 user_id = str(user.id)
                 current_members.add(user_id)

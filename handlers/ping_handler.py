@@ -32,6 +32,7 @@ class PingHandler(BaseHandler):
     def __init__(self, chat_repo, premium_repo, bot: Bot):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
+        self._active_pings = set()
         super().__init__(chat_repo, premium_repo)
 
     def register_handlers(self):
@@ -300,501 +301,527 @@ class PingHandler(BaseHandler):
             use_emoji: Використовувати емодзі замість імен
         """
         clean_chat_id = get_clean_chat_id(chat_id)
-        user_ids = list(users.keys())
 
-        # Логування для дебагу
-        old_flag = self.chat_repo.get_stop_flag(clean_chat_id)
-        self.logger.info(
-            f"[DEBUG] Початок пінгування: stop_flag={old_flag}, users={len(user_ids)}"
-        )
-
-        # Скидаємо прапорець зупинки перед початком
-        self.chat_repo.set_stop_flag(clean_chat_id, False)
-        self.logger.info("[DEBUG] Stop flag скинуто")
-
-        # Отримуємо налаштування чату
-        pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
-        first_msg_stop = self.chat_repo.get_setting(
-            clean_chat_id, "first_msg_stop", True
-        )
-        silent_mode = self.chat_repo.get_setting(clean_chat_id, "silent_mode", False)
-        show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
-
-        # Динамічні налаштування з урахуванням лімітів
-        ping_delay = self.chat_repo.get_setting(
-            clean_chat_id, "ping_delay", PING_LIMITS["default_delay"]
-        )
-        chunk_size = self.chat_repo.get_setting(
-            clean_chat_id, "chunk_size", PING_LIMITS["default_chunk"]
-        )
-
-        # Перевірка глобальних налаштувань (Global Override)
-        # Якщо в панелі /apanel стоїть затримка, вона стає МІНІМАЛЬНОЮ (для захисту від флуду)
-        global_delay = self.chat_repo.get_global_setting("ping_delay")
-        if global_delay is not None:
-            ping_delay = max(ping_delay, global_delay)
-
-        # Hard Limits Safety Check
-        if ping_delay < PING_LIMITS["min_delay"]:
-            ping_delay = PING_LIMITS["min_delay"]
-        if ping_delay > PING_LIMITS["max_delay"]:
-            ping_delay = PING_LIMITS["max_delay"]
-        if chunk_size < PING_LIMITS["min_chunk"]:
-            chunk_size = PING_LIMITS["min_chunk"]
-        if chunk_size > PING_LIMITS["max_chunk"]:
-            chunk_size = PING_LIMITS["max_chunk"]
-
-        chunk_size = int(chunk_size)
-
-        # Список повідомлень з кнопкою стоп для видалення в кінці (v1.6.3)
-        stop_messages = []
-
-        for i in range(0, len(user_ids), chunk_size):
-            # Перевіряємо прапорець зупинки
-            if self.chat_repo.get_stop_flag(clean_chat_id):
-                self.logger.info(f"Виклик зупинено в чаті {clean_chat_id}")
-                try:
-                    sent_stop = await self.bot.send_message(
-                        chat_id, "⏸ <b>Виклик зупинено</b>", parse_mode="HTML"
-                    )
-                    # Чистимо сповіщення про зупинку
-                    await self.auto_cleanup(sent_stop)
-                except Exception:
-                    pass
-                break
-
-            # v2.10.18: Dynamic Unreg Check - refresh unreg lists per chunk using centralized logic
-            (
-                temp_unreg,
-                super_unreg,
-                super_puper,
-                global_unreg,
-                global_super,
-                local_reg,
-            ) = self.chat_repo.unreg.get_all_unreg_sets(clean_chat_id)
-
-            chunk = user_ids[i : i + chunk_size]
-            mentions = []
-
-            for uid in chunk:
-                # Late check for unreg (v2.10.18: consistent with get_active_users)
-                is_local_unreg = (
-                    uid in temp_unreg or uid in super_unreg or uid in super_puper
+        # v2.10.22: Захист від подвійних викликів
+        if clean_chat_id in self._active_pings:
+            try:
+                sent = await self.bot.send_message(
+                    chat_id,
+                    "⚠️ <b>У цьому чаті вже запущено один виклик.</b>\n"
+                    "Зачекайте завершення попереднього або зупиніть його командою /stop.",
+                    parse_mode="HTML",
                 )
-                is_global_unreg = uid in global_unreg or uid in global_super
+                asyncio.create_task(self.auto_cleanup(sent))
+            except Exception:
+                pass
+            return
 
-                if is_local_unreg or (is_global_unreg and uid not in local_reg):
-                    continue
+        self._active_pings.add(clean_chat_id)
+        try:
+            user_ids = list(users.keys())
 
-                label = users[uid]
+            # Логування для дебагу
+            old_flag = self.chat_repo.get_stop_flag(clean_chat_id)
+            self.logger.info(
+                f"[DEBUG] Початок пінгування: stop_flag={old_flag}, users={len(user_ids)}"
+            )
 
-                # v2.6.7: Оновлення імен "на льоту" для ID-користувачів або автоматичне видалення тих, хто вийшов
-                # Ми робимо це тільки якщо ім'я - це ID, або періодично (але тут тільки для ID для швидкості)
-                if not use_emoji and (label.startswith("ID:") or label == "Користувач"):
+            # Скидаємо прапорець зупинки перед початком
+            self.chat_repo.set_stop_flag(clean_chat_id, False)
+            self.logger.info("[DEBUG] Stop flag скинуто")
+
+            # Отримуємо налаштування чату
+            pin_enabled = self.chat_repo.get_setting(clean_chat_id, "pin_enabled", True)
+            first_msg_stop = self.chat_repo.get_setting(
+                clean_chat_id, "first_msg_stop", True
+            )
+            silent_mode = self.chat_repo.get_setting(
+                clean_chat_id, "silent_mode", False
+            )
+            show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
+
+            # Динамічні налаштування з урахуванням лімітів
+            ping_delay = self.chat_repo.get_setting(
+                clean_chat_id, "ping_delay", PING_LIMITS["default_delay"]
+            )
+            chunk_size = self.chat_repo.get_setting(
+                clean_chat_id, "chunk_size", PING_LIMITS["default_chunk"]
+            )
+
+            # Перевірка глобальних налаштувань (Global Override)
+            # Якщо в панелі /apanel стоїть затримка, вона стає МІНІМАЛЬНОЮ (для захисту від флуду)
+            global_delay = self.chat_repo.get_global_setting("ping_delay")
+            if global_delay is not None:
+                ping_delay = max(ping_delay, global_delay)
+
+            # Hard Limits Safety Check
+            if ping_delay < PING_LIMITS["min_delay"]:
+                ping_delay = PING_LIMITS["min_delay"]
+            if ping_delay > PING_LIMITS["max_delay"]:
+                ping_delay = PING_LIMITS["max_delay"]
+            if chunk_size < PING_LIMITS["min_chunk"]:
+                chunk_size = PING_LIMITS["min_chunk"]
+            if chunk_size > PING_LIMITS["max_chunk"]:
+                chunk_size = PING_LIMITS["max_chunk"]
+
+            chunk_size = int(chunk_size)
+
+            # Список повідомлень з кнопкою стоп для видалення в кінці (v1.6.3)
+            stop_messages = []
+
+            for i in range(0, len(user_ids), chunk_size):
+                # Перевіряємо прапорець зупинки
+                if self.chat_repo.get_stop_flag(clean_chat_id):
+                    self.logger.info(f"Виклик зупинено в чаті {clean_chat_id}")
                     try:
-                        # Retry logic for Bad Gateway
-                        member = None
-                        for attempt in range(3):
-                            try:
-                                member = await self.bot.get_chat_member(
-                                    chat_id, int(uid)
-                                )
-                                break
-                            except TelegramServerError:
-                                if attempt == 2:
-                                    raise
-                                await asyncio.sleep(0.5)
-                            except Exception:
-                                raise
-
-                        if member:
-                            if member.status in ["left", "kicked"]:
-                                self.logger.info(
-                                    f"Cleanup: Користувач {uid} вийшов з чату. Видаляю з бази."
-                                )
-                                self.chat_repo.remove_user(clean_chat_id, uid)
-                                continue  # Пропускаємо пінгування цього юзера
-
-                            if member.user:
-                                from utils.helpers import get_user_name as resolve_name
-
-                                new_name = resolve_name(
-                                    first_name=member.user.first_name,
-                                    last_name=member.user.last_name,
-                                    username=member.user.username,
-                                    user_id=member.user.id,
-                                )
-                                if not new_name.startswith("ID:"):
-                                    label = new_name
-                                    # Зберігаємо оновлене ім'я в базу
-                                    self.chat_repo.save_user(
-                                        clean_chat_id, uid, label, update_unreg=False
-                                    )
-
-                        # Add small delay to prevent flood
-                        await asyncio.sleep(0.1)
-
-                    except Exception as e:
-                        # Якщо помилка "user not found" або подібні - він точно вийшов або ID недійсний
-                        err_msg = str(e).lower().replace("_", " ")
-                        if any(
-                            x in err_msg
-                            for x in [
-                                "user not found",
-                                "participant id invalid",
-                                "user id invalid",
-                                "member not found",
-                            ]
-                        ):
-                            self.logger.info(
-                                f"Cleanup: Користувач {uid} більше не в чаті ({err_msg}). Видаляю з бази."
-                            )
-                            self.chat_repo.remove_user(clean_chat_id, uid)
-                            continue
-
-                        self.logger.error(f"Could not resolve name for {uid}: {e}")
-
-                        # Alert Admin (831190060) about the error
-                        try:
-                            error_msg = (
-                                f"⚠️ <b>Ping Name Error</b>\n"
-                                f"Chat: {chat_id}\n"
-                                f"User: {uid}\n"
-                                f"Error: {str(e)[:100]}"
-                            )
-                            # Run in background to not block pings
-                            asyncio.create_task(
-                                self.bot.send_message(
-                                    831190060, error_msg, parse_mode="HTML"
-                                )
-                            )
-                        except Exception:
-                            pass
-
+                        sent_stop = await self.bot.send_message(
+                            chat_id, "⏸ <b>Виклик зупинено</b>", parse_mode="HTML"
+                        )
+                        # Чистимо сповіщення про зупинку
+                        await self.auto_cleanup(sent_stop)
                     except Exception:
                         pass
+                    break
 
-                # FINAL SAFETY: Never show ID in chat
-                if not use_emoji and label.startswith("ID:"):
-                    label = "Користувач"
-                    # Alert Admin about ID fallback - DISABLED due to spam
-                    # try:
-                    #     error_msg = (
-                    #         f"⚠️ <b>Ping ID Fallback</b>\n"
-                    #         f"Chat: {chat_id}\n"
-                    #         f"User: {uid}\n"
-                    #         f"Reason: No name resolved"
-                    #     )
-                    #     asyncio.create_task(self.bot.send_message(831190060, error_msg, parse_mode="HTML"))
-                    # except: pass
+                # v2.10.18: Dynamic Unreg Check - refresh unreg lists per chunk using centralized logic
+                (
+                    temp_unreg,
+                    super_unreg,
+                    super_puper,
+                    global_unreg,
+                    global_super,
+                    local_reg,
+                ) = self.chat_repo.unreg.get_all_unreg_sets(clean_chat_id)
 
-                # Зберігаємо ім'я користувача до того, як label буде перезаписано емодзі
-                user_name = label
+                chunk = user_ids[i : i + chunk_size]
+                mentions = []
 
-                if use_emoji:
-                    personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
-
-                    # v2.10.11: Логіка розділення:
-                    # 1. Якщо є персональний емодзі - використовуємо його завжди.
-                    # 2. Якщо немає:
-                    #    - У команді з іменами (/all) - нічого не додаємо (просто ім'я).
-                    #    - У команді БЕЗ імен (/emoji) - ставимо рандомний емодзі, щоб не палити ім'я.
-                    emoji_label = personal
-                    if not emoji_label and not show_names:
-                        emoji_label = random.choice(EMOJIS)
-
-                    print(
-                        f"[PING] User {uid}: personal={personal}, final_label={emoji_label}, show_names={show_names}"
+                for uid in chunk:
+                    # Late check for unreg (v2.10.18: consistent with get_active_users)
+                    is_local_unreg = (
+                        uid in temp_unreg or uid in super_unreg or uid in super_puper
                     )
+                    is_global_unreg = uid in global_unreg or uid in global_super
 
-                    # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
-                    if emoji_label and str(emoji_label).startswith("tg-emoji:"):
-                        emoji_id = emoji_label.split(":")[1]
-                        # Спробуємо знайти alt-символ в мапінгу
-                        alt = (
-                            self.chat_repo.emoji_packs.get_registered_emoji_alt(
-                                emoji_id
-                            )
-                            or "✨"
-                        )
-                        print(
-                            f"[PING] Premium emoji detected! ID={emoji_id}, alt={alt}"
-                        )
-                        # Зберігаємо: (type, emoji_id, uid, user_name, alt)
-                        mentions.append(("custom_emoji", emoji_id, uid, user_name, alt))
-                    elif emoji_label:
-                        import html
+                    if is_local_unreg or (is_global_unreg and uid not in local_reg):
+                        continue
 
-                        safe_emoji = html.escape(str(emoji_label))
-                        print(f"[PING] Regular emoji: safe_emoji={safe_emoji}")
-                        mentions.append(("regular", safe_emoji, uid, user_name))
-                    else:
-                        # Якщо емодзі немає - просто текст (але для /emoji це може бути порожньо)
-                        import html
+                    label = users[uid]
 
-                        safe_name = html.escape(user_name)
-                        mentions.append(("text", safe_name, uid, user_name))
-                else:
-                    # v2.9.0: Fix for special characters in names breaking HTML
-                    import html
+                    # v2.6.7: Оновлення імен "на льоту" для ID-користувачів або автоматичне видалення тих, хто вийшов
+                    # Ми робимо це тільки якщо ім'я - це ID, або періодично (але тут тільки для ID для швидкості)
+                    if not use_emoji and (
+                        label.startswith("ID:") or label == "Користувач"
+                    ):
+                        try:
+                            # Retry logic for Bad Gateway
+                            member = None
+                            for attempt in range(3):
+                                try:
+                                    member = await self.bot.get_chat_member(
+                                        chat_id, int(uid)
+                                    )
+                                    break
+                                except TelegramServerError:
+                                    if attempt == 2:
+                                        raise
+                                    await asyncio.sleep(0.5)
+                                except Exception:
+                                    raise
 
-                    safe_label = html.escape(str(label))
-                    # Зберігаємо як tuple для сумісності з новою логікою
-                    mentions.append(("text", safe_label, uid, user_name))
+                            if member:
+                                if member.status in ["left", "kicked"]:
+                                    self.logger.info(
+                                        f"Cleanup: Користувач {uid} вийшов з чату. Видаляю з бази."
+                                    )
+                                    self.chat_repo.remove_user(clean_chat_id, uid)
+                                    continue  # Пропускаємо пінгування цього юзера
 
-            try:
-                # Визначаємо чи потрібна кнопка стоп
-                is_first_chunk = i == 0
-                add_stop_button = True
+                                if member.user:
+                                    from utils.helpers import (
+                                        get_user_name as resolve_name,
+                                    )
 
-                if first_msg_stop and not is_first_chunk:
-                    add_stop_button = False
+                                    new_name = resolve_name(
+                                        first_name=member.user.first_name,
+                                        last_name=member.user.last_name,
+                                        username=member.user.username,
+                                        user_id=member.user.id,
+                                    )
+                                    if not new_name.startswith("ID:"):
+                                        label = new_name
+                                        # Зберігаємо оновлене ім'я в базу
+                                        self.chat_repo.save_user(
+                                            clean_chat_id,
+                                            uid,
+                                            label,
+                                            update_unreg=False,
+                                        )
 
-                keyboard = None
-                footer_text = ""
+                            # Add small delay to prevent flood
+                            await asyncio.sleep(0.1)
 
-                if add_stop_button:
-                    keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="🛑 Стоп", callback_data="stop_ping"
+                        except Exception as e:
+                            # Якщо помилка "user not found" або подібні - він точно вийшов або ID недійсний
+                            err_msg = str(e).lower().replace("_", " ")
+                            if any(
+                                x in err_msg
+                                for x in [
+                                    "user not found",
+                                    "participant id invalid",
+                                    "user id invalid",
+                                    "member not found",
+                                ]
+                            ):
+                                self.logger.info(
+                                    f"Cleanup: Користувач {uid} більше не в чаті ({err_msg}). Видаляю з бази."
                                 )
-                            ]
-                        ]
-                    )
-                    footer_text = "\n\n(стоп - зупинити)"
-
-                # Додаємо к-сть ТІЛЬКИ в перше повідомлення (v1.6.1)
-                count_text = ""
-                if is_first_chunk and show_count:
-                    count_text = f" (👥 {len(user_ids)})"
-
-                import html
-
-                sent_message = None
-                while not sent_message:
-                    try:
-                        # v2.10.8: Використовуємо HTML для кращої підтримки Custom Emoji
-                        text_parts = [
-                            f"{html.escape(call_text)}{html.escape(count_text)}\n\n"
-                        ]
-
-                        for mention_data in mentions:
-                            if not isinstance(mention_data, tuple):
+                                self.chat_repo.remove_user(clean_chat_id, uid)
                                 continue
 
-                            type_ = mention_data[0]
-                            uid = mention_data[2]
-                            user_name = (
-                                mention_data[3]
-                                if len(mention_data) > 3
-                                else "Користувач"
-                            )
-                            safe_name = html.escape(user_name)
+                            self.logger.error(f"Could not resolve name for {uid}: {e}")
 
-                            if type_ == "custom_emoji":
-                                emoji_id = mention_data[1]
-                                alt = mention_data[4] if len(mention_data) > 4 else "✨"
-
-                                if show_names:
-                                    # 🌸 <a href="...">Мишко</a>
-                                    # Клік по емодзі відкриє пак, клік по імені - профіль. Обидва пінгують.
-                                    text_parts.append(
-                                        f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
-                                    )
-                                    text_parts.append(
-                                        f' <a href="tg://user?id={uid}">{safe_name}</a>'
-                                    )
-                                else:
-                                    # ПРЕМИУМ ЕМОДЗІ + НЕВИДИМИЙ ПІНГ
-                                    # <tg-emoji> відкриває пак, <a> з ZWSP робить невидимий пінг поруч
-                                    text_parts.append(
-                                        f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
-                                    )
-                                    text_parts.append(
-                                        f'<a href="tg://user?id={uid}">&#8203;</a>'
-                                    )
-
-                                text_parts.append(" ")
-                            else:
-                                # ЗВИЧАЙНИЙ ЕМОДЗІ або ТЕКСТ
-                                val = mention_data[1]
-
-                                if show_names:
-                                    if type_ == "text":
-                                        # Тільки ім'я-посилання: <a href="...">Ім'я</a>
-                                        text_parts.append(
-                                            f'<a href="tg://user?id={uid}">{safe_name}</a>'
-                                        )
-                                    else:
-                                        # Емодзі + ім'я-посилання: 🦾 <a href="...">Ім'я</a>
-                                        text_parts.append(
-                                            f'{val} <a href="tg://user?id={uid}">{safe_name}</a>'
-                                        )
-                                else:
-                                    # Тільки емодзі-посилання: <a href="...">🦾</a>
-                                    text_parts.append(
-                                        f'<a href="tg://user?id={uid}">{val}</a>'
-                                    )
-
-                                text_parts.append(" ")
-
-                        full_message = "".join(text_parts).rstrip() + html.escape(
-                            footer_text
-                        )
-
-                        print(f"DEBUG: Відправляю повідомлення (HTML):\n{full_message}")
-
-                        sent_message = await self.bot.send_message(
-                            chat_id,
-                            full_message,
-                            parse_mode="HTML",
-                            reply_markup=keyboard,
-                            disable_notification=silent_mode,
-                        )
-
-                    except Exception as e:
-                        if "retry after" in str(e).lower():
-                            # Витягуємо час очікування
-                            import re
-
-                            wait_match = re.search(r"after (\d+)", str(e).lower())
-                            wait_time = int(wait_match.group(1)) if wait_match else 30
-
-                            self.logger.warning(
-                                f"Flood Control! Чекаємо {wait_time}с у чаті {chat_id}"
-                            )
-
-                            # Повідомляємо юзерів, якщо очікування довге
-                            if wait_time > 10:
-                                try:
-                                    wait_msg = await self.bot.send_message(
-                                        chat_id,
-                                        f"⏳ <b>Telegram обмежив швидкість.</b>\nАвтоматично продовжу через {wait_time} сек...",
-                                        parse_mode="HTML",
-                                    )
-                                    asyncio.create_task(self.auto_cleanup(wait_msg))
-                                except Exception:
-                                    pass
-
-                            await asyncio.sleep(wait_time + 1)
-
-                            # Перевіряємо, чи не натиснули СТОП поки ми спали
-                            if self.chat_repo.get_stop_flag(clean_chat_id):
-                                return
-                        else:
-                            # Якщо помилка "Invalid custom emoji", спробуємо відправити без них
-                            if "invalid custom emoji" in str(e).lower():
-                                self.logger.warning(
-                                    f"Invalid emoji in chunk {i}, retrying without custom tags"
+                            # Alert Admin (831190060) about the error
+                            try:
+                                error_msg = (
+                                    f"⚠️ <b>Ping Name Error</b>\n"
+                                    f"Chat: {chat_id}\n"
+                                    f"User: {uid}\n"
+                                    f"Error: {str(e)[:100]}"
                                 )
-                                # Очищаємо mentions від тегів <tg-emoji>
-                                import re
-
-                                clean_mentions = [
-                                    re.sub(r"<tg-emoji[^>]*>(.*?)</tg-emoji>", r"\1", m)
-                                    for m in mentions
-                                ]
-                                try:
-                                    sent_message = await self.bot.send_message(
-                                        chat_id,
-                                        f"<b>{call_text}{count_text}</b>\n\n"
-                                        + " ".join(clean_mentions)
-                                        + footer_text,
-                                        parse_mode="HTML",
-                                        reply_markup=keyboard,
-                                        disable_notification=silent_mode,
+                                # Run in background to not block pings
+                                asyncio.create_task(
+                                    self.bot.send_message(
+                                        831190060, error_msg, parse_mode="HTML"
                                     )
-                                    continue  # Спрацювало!
-                                except Exception as e2:
-                                    self.logger.error(
-                                        f"Failed even without emojis: {e2}"
-                                    )
+                                )
+                            except Exception:
+                                pass
 
-                            self.logger.error(f"Помилка при відправці чанку {i}: {e}")
-                            break
-
-                if not sent_message:
-                    continue
-
-                # Плануємо авточистку (v1.6.3)
-                if not add_stop_button:
-                    asyncio.create_task(self.auto_cleanup(sent_message))
-                else:
-                    stop_messages.append(sent_message)
-
-                # Закріплюємо перше повідомлення
-                if is_first_chunk and pin_enabled:
-                    try:
-                        await self.bot.pin_chat_message(
-                            chat_id, sent_message.message_id, disable_notification=True
-                        )
-                    except Exception as e:
-                        self.logger.warning(f"Не вдалося закріпити повідомлення: {e}")
-
-                await asyncio.sleep(ping_delay)
-            except Exception as e:
-                self.logger.error(f"Глобальна помилка в циклі пінгів: {e}")
-                continue
-
-        # В кінці всіх пінгів плануємо видалення кнопок "Стоп" (v1.6.3)
-        for msg in stop_messages:
-            asyncio.create_task(self.auto_cleanup(msg))
-
-        # Повідомлення про завершення (v2.3.1) - якщо увімкнено show_count
-        show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
-        if show_count and not self.chat_repo.get_stop_flag(clean_chat_id):
-            try:
-                stats = self.chat_repo.get_stats(clean_chat_id)
-
-                # Check for sticker configuration
-                sticker_path = self.chat_repo.get_setting(
-                    clean_chat_id, "summary_sticker"
-                )
-
-                info_lines = [
-                    "✅ Виклик завершено!",
-                    f"👥 Пропінговано: {len(users)}",
-                    f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост.",
-                ]
-                text_msg = "\n".join(info_lines)
-
-                sent = None
-                if sticker_path and os.path.exists(sticker_path):
-                    # Generate image
-                    output_path = f"data/temp_{clean_chat_id}.webp"
-                    watermark = self.chat_repo.get_setting(
-                        clean_chat_id, "summary_watermark"
-                    )
-                    result_path = create_summary_image(
-                        sticker_path, info_lines, output_path, watermark=watermark
-                    )
-
-                    if result_path:
-                        from aiogram.types import FSInputFile
-
-                        sticker_file = FSInputFile(result_path)
-                        sent = await self.bot.send_sticker(chat_id, sticker_file)
-                        # Clean up temp file
-                        try:
-                            os.remove(result_path)
                         except Exception:
                             pass
+
+                    # FINAL SAFETY: Never show ID in chat
+                    if not use_emoji and label.startswith("ID:"):
+                        label = "Користувач"
+
+                    # Зберігаємо ім'я користувача до того, як label буде перезаписано емодзі
+                    user_name = label
+
+                    if use_emoji:
+                        personal = self.chat_repo.get_user_setting(
+                            uid, "personal_emoji"
+                        )
+
+                        # v2.10.11: Логіка розділення:
+                        # 1. Якщо є персональний емодзі - використовуємо його завжди.
+                        # 2. Якщо немає:
+                        #    - У команді з іменами (/all) - нічого не додаємо (просто ім'я).
+                        #    - У команді БЕЗ імен (/emoji) - ставимо рандомний емодзі, щоб не палити ім'я.
+                        emoji_label = personal
+                        if not emoji_label and not show_names:
+                            emoji_label = random.choice(EMOJIS)
+
+                        # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
+                        if emoji_label and str(emoji_label).startswith("tg-emoji:"):
+                            emoji_id = emoji_label.split(":")[1]
+                            # Спробуємо знайти alt-символ в мапінгу
+                            alt = (
+                                self.chat_repo.emoji_packs.get_registered_emoji_alt(
+                                    emoji_id
+                                )
+                                or "✨"
+                            )
+                            # Зберігаємо: (type, emoji_id, uid, user_name, alt)
+                            mentions.append(
+                                ("custom_emoji", emoji_id, uid, user_name, alt)
+                            )
+                        elif emoji_label:
+                            import html
+
+                            safe_emoji = html.escape(str(emoji_label))
+                            mentions.append(("regular", safe_emoji, uid, user_name))
+                        else:
+                            # Якщо емодзі немає - просто текст (але для /emoji це може бути порожньо)
+                            import html
+
+                            safe_name = html.escape(user_name)
+                            mentions.append(("text", safe_name, uid, user_name))
                     else:
-                        # Fallback to text
+                        # v2.9.0: Fix for special characters in names breaking HTML
+                        import html
+
+                        safe_label = html.escape(str(label))
+                        # Зберігаємо як tuple для сумісності з новою логікою
+                        mentions.append(("text", safe_label, uid, user_name))
+
+                try:
+                    # Визначаємо чи потрібна кнопка стоп
+                    is_first_chunk = i == 0
+                    add_stop_button = True
+
+                    if first_msg_stop and not is_first_chunk:
+                        add_stop_button = False
+
+                    keyboard = None
+                    footer_text = ""
+
+                    if add_stop_button:
+                        keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text="🛑 Стоп", callback_data="stop_ping"
+                                    )
+                                ]
+                            ]
+                        )
+                        footer_text = "\n\n(стоп - зупинити)"
+
+                    # Додаємо к-сть ТІЛЬКИ в перше повідомлення (v1.6.1)
+                    count_text = ""
+                    if is_first_chunk and show_count:
+                        count_text = f" (👥 {len(user_ids)})"
+
+                    import html
+
+                    sent_message = None
+                    while not sent_message:
+                        try:
+                            # v2.10.8: Використовуємо HTML для кращої підтримки Custom Emoji
+                            text_parts = [
+                                f"{html.escape(call_text)}{html.escape(count_text)}\n\n"
+                            ]
+
+                            for mention_data in mentions:
+                                if not isinstance(mention_data, tuple):
+                                    continue
+
+                                type_ = mention_data[0]
+                                uid = mention_data[2]
+                                user_name = (
+                                    mention_data[3]
+                                    if len(mention_data) > 3
+                                    else "Користувач"
+                                )
+                                safe_name = html.escape(user_name)
+
+                                if type_ == "custom_emoji":
+                                    emoji_id = mention_data[1]
+                                    alt = (
+                                        mention_data[4]
+                                        if len(mention_data) > 4
+                                        else "✨"
+                                    )
+
+                                    if show_names:
+                                        # 🌸 <a href="...">Мишко</a>
+                                        # Клік по емодзі відкриє пак, клік по імені - профіль. Обидва пінгують.
+                                        text_parts.append(
+                                            f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
+                                        )
+                                        text_parts.append(
+                                            f' <a href="tg://user?id={uid}">{safe_name}</a>'
+                                        )
+                                    else:
+                                        # ПРЕМИУМ ЕМОДЗІ + НЕВИДИМИЙ ПІНГ
+                                        # <tg-emoji> відкриває пак, <a> з ZWSP робить невидимий пінг поруч
+                                        text_parts.append(
+                                            f'<tg-emoji emoji-id="{emoji_id}">{alt}</tg-emoji>'
+                                        )
+                                        text_parts.append(
+                                            f'<a href="tg://user?id={uid}">&#8203;</a>'
+                                        )
+
+                                    text_parts.append(" ")
+                                else:
+                                    # ЗВИЧАЙНИЙ ЕМОДЗІ або ТЕКСТ
+                                    val = mention_data[1]
+
+                                    if show_names:
+                                        if type_ == "text":
+                                            # Тільки ім'я-посилання: <a href="...">Ім'я</a>
+                                            text_parts.append(
+                                                f'<a href="tg://user?id={uid}">{safe_name}</a>'
+                                            )
+                                        else:
+                                            # Емодзі + ім'я-посилання: 🦾 <a href="...">Ім'я</a>
+                                            text_parts.append(
+                                                f'{val} <a href="tg://user?id={uid}">{safe_name}</a>'
+                                            )
+                                    else:
+                                        # Тільки емодзі-посилання: <a href="...">🦾</a>
+                                        text_parts.append(
+                                            f'<a href="tg://user?id={uid}">{val}</a>'
+                                        )
+
+                                    text_parts.append(" ")
+
+                            full_message = "".join(text_parts).rstrip() + html.escape(
+                                footer_text
+                            )
+
+                            sent_message = await self.bot.send_message(
+                                chat_id,
+                                full_message,
+                                parse_mode="HTML",
+                                reply_markup=keyboard,
+                                disable_notification=silent_mode,
+                            )
+
+                        except Exception as e:
+                            if "retry after" in str(e).lower():
+                                # Витягуємо час очікування
+                                import re
+
+                                wait_match = re.search(r"after (\d+)", str(e).lower())
+                                wait_time = (
+                                    int(wait_match.group(1)) if wait_match else 30
+                                )
+
+                                self.logger.warning(
+                                    f"Flood Control! Чекаємо {wait_time}с у чаті {chat_id}"
+                                )
+
+                                # Повідомляємо юзерів, якщо очікування довге
+                                if wait_time > 10:
+                                    try:
+                                        wait_msg = await self.bot.send_message(
+                                            chat_id,
+                                            f"⏳ <b>Telegram обмежив швидкість.</b>\nАвтоматично продовжу через {wait_time} сек...",
+                                            parse_mode="HTML",
+                                        )
+                                        asyncio.create_task(self.auto_cleanup(wait_msg))
+                                    except Exception:
+                                        pass
+
+                                await asyncio.sleep(wait_time + 1)
+
+                                # Перевіряємо, чи не натиснули СТОП поки ми спали
+                                if self.chat_repo.get_stop_flag(clean_chat_id):
+                                    return
+                            else:
+                                # Якщо помилка "Invalid custom emoji", спробуємо відправити без них
+                                if "invalid custom emoji" in str(e).lower():
+                                    self.logger.warning(
+                                        f"Invalid emoji in chunk {i}, retrying without custom tags"
+                                    )
+                                    # Очищаємо mentions від тегів <tg-emoji>
+                                    import re
+
+                                    clean_mentions = [
+                                        re.sub(
+                                            r"<tg-emoji[^>]*>(.*?)</tg-emoji>", r"\1", m
+                                        )
+                                        for m in mentions
+                                    ]
+                                    try:
+                                        sent_message = await self.bot.send_message(
+                                            chat_id,
+                                            f"<b>{call_text}{count_text}</b>\n\n"
+                                            + " ".join(clean_mentions)
+                                            + footer_text,
+                                            parse_mode="HTML",
+                                            reply_markup=keyboard,
+                                            disable_notification=silent_mode,
+                                        )
+                                        continue  # Спрацювало!
+                                    except Exception as e2:
+                                        self.logger.error(
+                                            f"Failed even without emojis: {e2}"
+                                        )
+
+                                self.logger.error(
+                                    f"Помилка при відправці чанку {i}: {e}"
+                                )
+                                break
+
+                    if not sent_message:
+                        continue
+
+                    # Плануємо авточистку (v1.6.3)
+                    if not add_stop_button:
+                        asyncio.create_task(self.auto_cleanup(sent_message))
+                    else:
+                        stop_messages.append(sent_message)
+
+                    # Закріплюємо перше повідомлення
+                    if is_first_chunk and pin_enabled:
+                        try:
+                            await self.bot.pin_chat_message(
+                                chat_id,
+                                sent_message.message_id,
+                                disable_notification=True,
+                            )
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Не вдалося закріпити повідомлення: {e}"
+                            )
+
+                    await asyncio.sleep(ping_delay)
+                except Exception as e:
+                    self.logger.error(f"Глобальна помилка в циклі пінгів: {e}")
+                    continue
+
+            # В кінці всіх пінгів плануємо видалення кнопок "Стоп" (v1.6.3)
+            for msg in stop_messages:
+                asyncio.create_task(self.auto_cleanup(msg))
+
+            # Повідомлення про завершення (v2.3.1) - якщо увімкнено show_count
+            show_count = self.chat_repo.get_setting(clean_chat_id, "show_count", True)
+            if show_count and not self.chat_repo.get_stop_flag(clean_chat_id):
+                try:
+                    stats = self.chat_repo.get_stats(clean_chat_id)
+
+                    # Check for sticker configuration
+                    sticker_path = self.chat_repo.get_setting(
+                        clean_chat_id, "summary_sticker"
+                    )
+
+                    info_lines = [
+                        "✅ Виклик завершено!",
+                        f"👥 Пропінговано: {len(users)}",
+                        f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост.",
+                    ]
+                    text_msg = "\n".join(info_lines)
+
+                    sent = None
+                    if sticker_path and os.path.exists(sticker_path):
+                        # Generate image
+                        output_path = f"data/temp_{clean_chat_id}.webp"
+                        watermark = self.chat_repo.get_setting(
+                            clean_chat_id, "summary_watermark"
+                        )
+                        result_path = create_summary_image(
+                            sticker_path, info_lines, output_path, watermark=watermark
+                        )
+
+                        if result_path:
+                            from aiogram.types import FSInputFile
+
+                            sticker_file = FSInputFile(result_path)
+                            sent = await self.bot.send_sticker(chat_id, sticker_file)
+                            # Clean up temp file
+                            try:
+                                os.remove(result_path)
+                            except Exception:
+                                pass
+                        else:
+                            # Fallback to text
+                            sent = await self.bot.send_message(
+                                chat_id, text_msg, parse_mode="HTML"
+                            )
+                    else:
                         sent = await self.bot.send_message(
                             chat_id, text_msg, parse_mode="HTML"
                         )
-                else:
-                    sent = await self.bot.send_message(
-                        chat_id, text_msg, parse_mode="HTML"
-                    )
 
-                if sent:
-                    asyncio.create_task(self.auto_cleanup(sent))
-            except Exception as e:
-                self.logger.debug(f"Could not send completion message: {e}")
+                    if sent:
+                        asyncio.create_task(self.auto_cleanup(sent))
+                except Exception as e:
+                    self.logger.debug(f"Could not send completion message: {e}")
+        finally:
+            self._active_pings.discard(clean_chat_id)
 
     async def cmd_set_sticker(self, message: Message):
         """Встановлює або видаляє стікер для фону підсумків"""

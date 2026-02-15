@@ -3,6 +3,7 @@ Admin handlers - команди для адміністраторів (SRP)
 """
 
 import logging
+import asyncio
 from aiogram import F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message
@@ -41,6 +42,7 @@ class AdminHandler(BaseHandler):
         self.userbot = userbot
         self.emoji_service = emoji_service
         self.logger = logging.getLogger(__name__)
+        self._active_syncs = set()
         super().__init__(chat_repo, premium_repo)
 
     def register_handlers(self):
@@ -158,6 +160,23 @@ class AdminHandler(BaseHandler):
         )
         chat_id = get_clean_chat_id(message.chat.id)
 
+        # v2.10.22: Захист від подвійних запусків
+        if chat_id in self._active_syncs:
+            try:
+                sent = await message.answer(
+                    "⚠️ <b>Синхронізація вже виконується в цьому чаті.</b>\n"
+                    "Зачекайте завершення або зупиніть її командою /stop.",
+                    parse_mode="HTML",
+                )
+                asyncio.create_task(self.auto_cleanup(sent))
+            except Exception:
+                pass
+            return
+
+        self._active_syncs.add(chat_id)
+        # Скидаємо прапорець зупинки
+        self.chat_repo.set_stop_flag(chat_id, False)
+
         try:
             # ЕТАП 1: Синхронізація Адміністраторів (Bot API)
             # Це працює завжди, навіть без юзербота
@@ -258,7 +277,12 @@ class AdminHandler(BaseHandler):
 
         except Exception as e:
             self.logger.error(f"General sync error: {e}")
-            await status.edit_text(f"❌ Помилка синхронізації: {e}")
+            try:
+                await status.edit_text(f"❌ Помилка синхронізації: {e}")
+            except Exception:
+                pass
+        finally:
+            self._active_syncs.discard(chat_id)
 
         await self.auto_cleanup(message, status)
 
