@@ -6,7 +6,6 @@ v2.6.0: Використовує StringSession замість файлових �
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from pathlib import Path
 from telethon import TelegramClient, events as t_events, types
 from telethon.sessions import StringSession
 from core import ChatRepository
@@ -182,12 +181,23 @@ class UserbotCollector:
         # Отримуємо список поточних учасників з БД
         db_users = set(self.chat_repo.get_all_user_ids(clean_chat_id))
         current_members = set()
-
         count = 0
+        regular_found = 0
+        me = await self.client.get_me()
+
         async for user in self.client.iter_participants(chat_id):
             if not user.bot:
                 user_id = str(user.id)
                 current_members.add(user_id)
+
+                # Перевірка ролі (v2.10.21)
+                p = getattr(user, "participant", None)
+                is_admin = isinstance(
+                    p, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator)
+                )
+
+                if user.id != me.id and not is_admin:
+                    regular_found += 1
 
                 name = get_user_name(
                     first_name=user.first_name,
@@ -211,15 +221,22 @@ class UserbotCollector:
                 )
                 count += 1
 
-        # Safety Check: Hidden Members Protection (v2.7.1)
-        # If we see significantly fewer users than in DB (e.g. < 20% of previous size),
-        # assume we lost visibility (Hidden Members) and skip cleanup.
-        if len(db_users) > 15:
-            retention_rate = len(current_members) / len(db_users)
-            if retention_rate < 0.2:
+        # v2.10.21: Вдосконалений захист від Hide Members
+        if len(db_users) > 5:
+            # Сценарій А: Ми бачимо ЛИШЕ адмінів та себе (а в базі було більше людей)
+            if regular_found == 0 and len(db_users) > len(current_members):
                 self.logger.warning(
-                    f"PROTECTION: Detected massive user drop ({len(db_users)} -> {len(current_members)}). "
-                    f"Likely 'Hide Members' enabled and Admin rights lost. Cleanup skipped."
+                    f"⚠️ PROTECT: Юзербот бачить лише себе та адмінів ({len(current_members)})! "
+                    f"В базі {len(db_users)} учасників. Ймовірно увімкнено 'Hide Members'. Очищення бази пропущено."
+                )
+                return count
+
+            # Сценарій Б: Різке падіння (менше 15% від попередньої кількості)
+            retention_rate = len(current_members) / len(db_users)
+            if retention_rate < 0.15:
+                self.logger.warning(
+                    f"⚠️ PROTECT: Юзербот бачить лише {len(current_members)} учасників з {len(db_users)}! "
+                    f"Занадто великий перепад. Очищення бази пропущено для безпеки."
                 )
                 return count
 
@@ -249,6 +266,7 @@ class UserbotCollector:
                 except (ValueError, TypeError):
                     pass
 
+            # v2.10.21: Останній шанс — якщо ім'я вже санітизоване і юзер був активний нещодавно, не чіпаємо
             self.chat_repo.remove_user(clean_chat_id, uid)
             self.logger.info(
                 f"Cleanup: Видалено неіснуючого учасника {uid} з {clean_chat_id}"

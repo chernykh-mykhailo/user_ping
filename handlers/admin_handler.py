@@ -3,7 +3,6 @@ Admin handlers - команди для адміністраторів (SRP)
 """
 
 import logging
-import asyncio
 from aiogram import F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message
@@ -181,6 +180,10 @@ class AdminHandler(BaseHandler):
             # ЕТАП 2: Повна синхронізація (Userbot)
             is_ub_enabled = self.chat_repo.get_global_setting("use_userbot", True)
 
+            # Отримуємо загальну кількість юзерів для звіту
+            chat_data = self.chat_repo.get_chat_data(chat_id)
+            total_users = len(chat_data.get("users", {}))
+
             if is_ub_enabled:
                 await status.edit_text(
                     f"✅ Адміни ({admin_count}) оновлені.\n🛰 <b>Запускаю юзербота для повного збору...</b>",
@@ -201,38 +204,56 @@ class AdminHandler(BaseHandler):
                     self.logger.error(f"Userbot sync error: {ub_err}")
 
                     if "no workers running" in error_text or "timeout" in error_text:
-                        # Це внутрішні глюки Telegram, а не відсутність адміна
                         await status.edit_text(
                             f"✅ <b>Адмін-склад: OK</b> (+{admin_count})\n\n"
                             f"⚠️ <b>Тимчасова помилка Telegram (500)</b>\n"
-                            f"Сервери Telegram зараз перевантажені або нестабільні. Повний збір учасників неможливий у цей момент.\n\n"
-                            f"🕒 Спробуйте ще раз через 5-10 хвилин.",
+                            f"Сервери Telegram зараз перевантажені або нестабільні.\n\n"
+                            f"🕒 Спробуйте пізніше.",
                             parse_mode="HTML",
                         )
                     else:
-                        # Ймовірно, справді треба додати юзербота
                         await status.edit_text(
                             f"✅ <b>Синхронізація (Admin Rights): OK</b>\n"
                             f"👥 Знайдено адмінів: {admin_count}\n\n"
                             f"⚠️ <b>Повний збір пропущено</b>\n"
-                            f"Для повного збору всіх учасників чату, нам потрібна допомога допоміжного акаунта.\n\n"
-                            f"👉 <b>Рішення:</b>\n"
-                            f"Додайте в чат: @you_can_try_this\n"
-                            f"I повторіть /sync",
+                            f"Для повного збору додайте: @you_can_try_this",
                             parse_mode="HTML",
                         )
             else:
-                # Get total users in chat
-                chat_data = self.chat_repo.get_chat_data(chat_id)
-                total_users = len(chat_data.get("users", {}))
-
                 await status.edit_text(
                     f"✅ <b>Синхронізація завершена!</b>\n\n"
                     f"👥 Всього в базі чату: {total_users}\n"
                     f"👑 Оновлено адмінів: {admin_count}\n\n"
-                    f"<i>Для повного збору додайте нашого Support Admin: @you_can_try_this</i>",
+                    f"<i>Для повного збору додайте нашого Support Admin</i>",
                     parse_mode="HTML",
                 )
+
+            # ЕТАП 3: Санітизація існуючих імен (v2.10.21)
+            chat_data = self.chat_repo.get_chat_data(chat_id)
+            all_users = chat_data.get("users", {})
+            cleaned_count = 0
+
+            for uid, user_info in all_users.items():
+                if isinstance(user_info, dict):
+                    old_name = user_info.get("name", "")
+                    new_name = get_user_name(first_name=old_name)
+                    if old_name != new_name:
+                        user_info["name"] = new_name
+                        cleaned_count += 1
+                elif isinstance(user_info, str):
+                    new_name = get_user_name(first_name=user_info)
+                    if user_info != new_name:
+                        all_users[uid] = {
+                            "name": new_name,
+                            "last_seen": "2000-01-01T00:00:00",
+                        }
+                        cleaned_count += 1
+
+            if cleaned_count > 0:
+                self.logger.info(
+                    f"Санітизація: Очищено {cleaned_count} імен у чаті {chat_id}"
+                )
+                self.chat_repo.storage.save(self.chat_repo.storage.load())
 
         except Exception as e:
             self.logger.error(f"General sync error: {e}")

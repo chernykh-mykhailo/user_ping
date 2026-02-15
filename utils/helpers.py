@@ -111,13 +111,21 @@ def get_user_name(first_name=None, last_name=None, username=None, user_id=None) 
     else:
         name = "Користувач"
 
-    # ОЧИЩЕННЯ:
-    # а) Видаляємо емодзі та спецсимволи (залишаємо букви, цифри, пробіли та деякі знаки)
-    # Додаємо апострофи: ' (U+0027), ’ (U+2019), ʼ (U+02BC)
-    name = re.sub(r"[^\w\s\.\-\'’ʼ]", "", name)
+    # ОЧИЩЕННЯ (v2.10.21):
+    # шукаємо першу послідовність букв, цифр або дозволених знаків (., -, апостроф)
+    # це дозволяє ігнорувати емодзі на початку та коректно витягувати перше слово
 
-    # б) Беремо лише перше слово (до першого пробілу)
-    name = name.split()[0] if name.split() else name
+    # Дозволені символи крім \w: крапка, дефіс, апострофи
+    match = re.search(r"[\w\.\-\'’ʼ]+", name)
+    if match:
+        name = match.group(0)
+    else:
+        # Fallback: видаляємо все заборонене і беремо перше слово
+        name = re.sub(r"[^\w\s\.\-\'’ʼ]", "", name)
+        name = name.split()[0] if name.split() else "Користувач"
+
+    # Dodatkove ochyschennya: vydalyayemo krapyky/defisy na pochatku/kinci
+    name = name.strip(". -")
 
     # в) Обмежуємо довжину (наприклад, 12 символів)
     if len(name) > 12:
