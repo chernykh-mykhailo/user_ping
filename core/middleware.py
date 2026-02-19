@@ -135,7 +135,7 @@ class ActivityMiddleware(BaseMiddleware):
 
                         msg = f"✅ <b>{name}</b> повернувся до активних!\n"
                         if remaining > 0:
-                            msg += f"📊 Анрегнутих: {remaining} осіб"
+                            msg += f"📊 Анрегнутих лишилось: {remaining} осіб"
                         else:
                             msg += "📊 Всі в активних!"
 
