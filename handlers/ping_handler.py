@@ -781,7 +781,7 @@ class PingHandler(BaseHandler):
                     info_lines = [
                         "✅ Виклик завершено!",
                         f"👥 Пропінговано: {len(users)}",
-                        f"🔕 В анрегі: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост.",
+                        f"🔕 Анрегнуто: {stats['temp_unreg']} тимч. / {stats['super_unreg']} пост.",
                     ]
                     text_msg = "\n".join(info_lines)
 

@@ -123,7 +123,7 @@ class ActivityMiddleware(BaseMiddleware):
                     username=event.from_user.username,
                 )
 
-                # Якщо був в анрегі і це не команда - сповіщаємо (якщо налаштування увімкнено)
+                # Якщо був в анрезі і це не команда - сповіщаємо (якщо налаштування увімкнено)
                 unreg_notify = self.chat_repo.get_setting(
                     chat_id, "unreg_notify", False
                 )
@@ -135,7 +135,7 @@ class ActivityMiddleware(BaseMiddleware):
 
                         msg = f"✅ <b>{name}</b> повернувся до активних!\n"
                         if remaining > 0:
-                            msg += f"📊 В анрегі залишилось: {remaining} осіб"
+                            msg += f"📊 Анрегнутих: {remaining} осіб"
                         else:
                             msg += "📊 Всі в активних!"
 
