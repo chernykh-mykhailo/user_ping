@@ -146,7 +146,7 @@ class PingHandler(BaseHandler):
         self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
         self.router.message(Command("deny_unreg"))(self.cmd_deny_unreg)
         self.router.message(Command("set_watermark"))(self.cmd_set_watermark)
-        self.router.message(F.text.regexp(r"^!(\w+)$", flags=0))(self.cmd_call_trigger)
+        self.router.message(F.text.regexp(r"^!(\S+)$", flags=0))(self.cmd_call_trigger)
 
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
         # Should be LAST
@@ -594,9 +594,7 @@ class PingHandler(BaseHandler):
                         try:
                             # v2.10.25: НЕ ескейпимо call_text тут, бо він може містити HTML розмітку від хендлерів
                             # Але ескейпимо лічильник, щоб бути в безпеці
-                            text_parts = [
-                                f"{call_text}{html.escape(count_text)}\n\n"
-                            ]
+                            text_parts = [f"{call_text}{html.escape(count_text)}\n\n"]
 
                             for mention_data in mentions:
                                 if not isinstance(mention_data, tuple):
@@ -906,7 +904,7 @@ class PingHandler(BaseHandler):
             template_name = parts[1].strip()
 
             if template_name in templates:
-                # Шаблон може містити HTML (наприклад, <b>), тому ми його НЕ ескейпимо 
+                # Шаблон може містити HTML (наприклад, <b>), тому ми його НЕ ескейпимо
                 # (власник шаблону сам відповідає за валідність HTML)
                 call_text = templates[template_name]
             else:
@@ -941,6 +939,7 @@ class PingHandler(BaseHandler):
             return
 
         import html
+
         parts = message.text.split(maxsplit=1)
         call_text = html.escape(parts[1]) if len(parts) > 1 else "📣 Увага!"
 
@@ -962,6 +961,7 @@ class PingHandler(BaseHandler):
             return
 
         import html
+
         parts = message.text.split(maxsplit=1)
         call_text = html.escape(parts[1]) if len(parts) > 1 else "📣 Виклик адмінів!"
 
@@ -986,8 +986,11 @@ class PingHandler(BaseHandler):
             return
 
         import html
+
         parts = message.text.split(maxsplit=1)
-        call_text = html.escape(parts[1]) if len(parts) > 1 else "🔥 Виклик найактивніших!"
+        call_text = (
+            html.escape(parts[1]) if len(parts) > 1 else "🔥 Виклик найактивніших!"
+        )
 
         chat_id = get_clean_chat_id(message.chat.id)
         recent_users = await self._get_recently_active_users(chat_id, hours=24)
@@ -1014,8 +1017,13 @@ class PingHandler(BaseHandler):
             return
 
         import html
+
         parts = message.text.split(maxsplit=1)
-        call_text = html.escape(parts[1]) if len(parts) > 1 else "📅 Виклик активних за тиждень!"
+        call_text = (
+            html.escape(parts[1])
+            if len(parts) > 1
+            else "📅 Виклик активних за тиждень!"
+        )
 
         chat_id = get_clean_chat_id(message.chat.id)
         recent_users = await self._get_recently_active_users(
@@ -1042,8 +1050,13 @@ class PingHandler(BaseHandler):
             return
 
         import html
+
         parts = message.text.split(maxsplit=1)
-        call_text = html.escape(parts[1]) if len(parts) > 1 else "✍️ Виклик тих, хто спілкувався!"
+        call_text = (
+            html.escape(parts[1])
+            if len(parts) > 1
+            else "✍️ Виклик тих, хто спілкувався!"
+        )
 
         chat_id = get_clean_chat_id(message.chat.id)
         users = await self._get_filtered_users(chat_id, source="message", hours=24)
@@ -1112,8 +1125,10 @@ class PingHandler(BaseHandler):
         import html
 
         # Текст користувача ескейпимо окремо, а префікс має бути сирим HTML (v2.10.25)
-        user_text = html.escape(parts[1]) if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
-        
+        user_text = (
+            html.escape(parts[1]) if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
+        )
+
         if prefix:
             call_text = prefix + user_text
         else:
@@ -1557,7 +1572,7 @@ class PingHandler(BaseHandler):
 
         import re
 
-        match = re.search(r"^!(\w+)$", message.text)
+        match = re.search(r"^!(\S+)$", message.text)
         if not match:
             return
 
@@ -1662,8 +1677,8 @@ class PingHandler(BaseHandler):
             # Тихо ігноруємо, якщо тригер не знайдено
             return
 
-        # Отримуємо імена користувачів (враховуючи сортування за активністю)
-        all_users = await self.chat_repo.get_active_users(chat_id)
+        # Отримуємо імена користувачів
+        all_users = self.chat_repo.get_active_users(chat_id)
 
         trigger_users = {}
         for uid, name in all_users.items():
