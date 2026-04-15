@@ -73,20 +73,20 @@ class UserHandler(BaseHandler):
 
         # Unreg/Reg - case-insensitive without shadowing (v2.10.28)
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r"^[!/]?анрег\b", re.I))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r"^[!/]?unreg\b", re.I))(self.cmd_unreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?анрег\b", re.I)))(self.cmd_unreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?unreg\b", re.I)))(self.cmd_unreg)
 
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(r"^[!/]?суперанрег\b", re.I))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(r"^[!/]?superunreg\b", re.I))(self.cmd_superunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?суперанрег\b", re.I)))(self.cmd_superunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?superunreg\b", re.I)))(self.cmd_superunreg)
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
-        self.router.message(F.text.regexp(r"^[!/]суперпуперанрег\b", re.I))(self.cmd_superpuperunreg)
-        self.router.message(F.text.regexp(r"^[!/]superpuperunreg\b", re.I))(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]суперпуперанрег\b", re.I)))(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]superpuperunreg\b", re.I)))(self.cmd_superpuperunreg)
 
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r"^[!/]?рег\b", re.I))(self.cmd_reg)
-        self.router.message(F.text.regexp(r"^[!/]?reg\b", re.I))(self.cmd_reg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?рег\b", re.I)))(self.cmd_reg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?reg\b", re.I)))(self.cmd_reg)
 
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)

@@ -5,6 +5,7 @@ Ping handlers - команди пінгування (SRP)
 import logging
 import asyncio
 import random
+import re
 from datetime import datetime, timedelta
 from aiogram import F, Bot
 from aiogram.filters import Command
@@ -43,69 +44,68 @@ class PingHandler(BaseHandler):
         """Реєструє хендлери пінгування"""
         # Базові виклики
         self.router.message(Command("all"))(self.cmd_all)
-        self.router.message(F.text.regexp(r"^[!/]кнагє", flags=0))(self.cmd_all)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]кнагє", re.I)))(self.cmd_all)
 
         self.router.message(Command("emoji"))(self.cmd_emoji)
-        self.router.message(F.text.regexp(r"^[!/]емодзі", flags=0))(self.cmd_emoji)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]емодзі", re.I)))(self.cmd_emoji)
 
         # Нові команди v1.1.0
         self.router.message(Command("admins"))(self.cmd_admins)
-        self.router.message(F.text.regexp(r"^[!/]адміни", flags=0))(self.cmd_admins)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]адміни", re.I)))(self.cmd_admins)
 
         self.router.message(Command("anybody"))(self.cmd_anybody)
-        self.router.message(F.text.regexp(r"^[!/]хтось", flags=0))(self.cmd_anybody)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]хтось", re.I)))(self.cmd_anybody)
 
         self.router.message(Command("active"))(self.cmd_active)
-        self.router.message(F.text.regexp(r"^[!/]активні", flags=0))(self.cmd_active)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]активні", re.I)))(self.cmd_active)
 
         self.router.message(Command("active_week"))(self.cmd_active_week)
-        self.router.message(F.text.regexp(r"^[!/]актив_тиждень", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^[!/]актив_тиждень", re.I)))(
             self.cmd_active_week
         )
 
         self.router.message(Command("writers"))(self.cmd_writers)
-        self.router.message(F.text.regexp(r"^[!/]писали", flags=0))(self.cmd_writers)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]писали", re.I)))(self.cmd_writers)
 
         self.router.message(Command("online"))(self.cmd_online)
-        self.router.message(F.text.regexp(r"^[!/]онлайн", flags=0))(self.cmd_online)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]онлайн", re.I)))(self.cmd_online)
 
         self.router.message(Command("stop", "stopcall"))(self.cmd_stop)
-        self.router.message(F.text.regexp(r"^[!/]стоп", flags=0))(self.cmd_stop)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]стоп", re.I)))(self.cmd_stop)
 
         # Sticker Handler
         self.router.message(Command("set_sticker"))(self.cmd_set_sticker)
 
         # Шаблони викликів
-        self.router.message(F.text.regexp(r"^!cpatterns$", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!cpatterns$", re.I)))(
             self.cmd_list_templates
         )
-        self.router.message(F.text.regexp(r"^!addcpattern\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!addcpattern\s+(\S+)", re.I)))(
             self.cmd_add_template
         )
-        self.router.message(F.text.regexp(r"^!delcpattern\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!delcpattern\s+(\S+)", re.I)))(
             self.cmd_del_template
         )
 
         # Тригери викликів v1.2.0
-        self.router.message(F.text.regexp(r"^!calls$", flags=0))(self.cmd_list_triggers)
-        self.router.message(F.text.regexp(r"^!callinfo\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!calls$", re.I)))(self.cmd_list_triggers)
+        self.router.message(F.text.regexp(re.compile(r"^!callinfo\s+(\S+)", re.I)))(
             self.cmd_trigger_info
         )
-        self.router.message(F.text.regexp(r"^!addcall\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!addcall\s+(\S+)", re.I)))(
             self.cmd_add_trigger
         )
-        self.router.message(F.text.regexp(r"^!delcall\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!delcall\s+(\S+)", re.I)))(
             self.cmd_del_trigger
         )
-        self.router.message(F.text.regexp(r"^!adduser\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!adduser\s+(\S+)", re.I)))(
             self.cmd_add_user_to_trigger
         )
-        self.router.message(F.text.regexp(r"^!deluser\s+(\S+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!deluser\s+(\S+)", re.I)))(
             self.cmd_del_user_from_trigger
         )
 
         # Self-Service Roles v1.3.0
-        # 1. Custom Triggers Management (Specific Commands)
         self.router.message(F.text.startswith("!addtrigger"))(
             self.cmd_add_custom_trigger
         )
@@ -130,10 +130,10 @@ class PingHandler(BaseHandler):
         self.router.message(F.text == "!triggers")(self.cmd_list_custom_triggers)
 
         # 2. Specific System Commands
-        self.router.message(F.text.regexp(r"^!roles_panel$", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!roles_panel$", re.I)))(
             self.cmd_roles_panel
         )
-        self.router.message(F.text.regexp(r"^!set_role_emoji\s+(\S+)\s+(.+)", flags=0))(
+        self.router.message(F.text.regexp(re.compile(r"^!set_role_emoji\s+(\S+)\s+(.+)", re.I)))(
             self.cmd_set_role_emoji
         )
         self.router.callback_query(F.data.startswith("role_"))(
@@ -142,11 +142,10 @@ class PingHandler(BaseHandler):
         self.router.callback_query(F.data == "stop_ping")(self.callback_stop_ping)
 
         # 3. Dynamic Triggers (Regex !word)
-        # This catches !croco (Groups) AND !custom (Aliases)
         self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
         self.router.message(Command("deny_unreg"))(self.cmd_deny_unreg)
         self.router.message(Command("set_watermark"))(self.cmd_set_watermark)
-        self.router.message(F.text.regexp(r"^!(\S+)$", flags=0))(self.cmd_call_trigger)
+        self.router.message(F.text.regexp(re.compile(r"^!(\S+)$", re.I)))(self.cmd_call_trigger)
 
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
         # Should be LAST
