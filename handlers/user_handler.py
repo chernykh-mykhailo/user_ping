@@ -53,7 +53,7 @@ class UserHandler(BaseHandler):
         self.router.message(Command("start"))(
             self.cmd_start
         )  # Окремо для реферальних посилань
-        self.router.message(F.text.regexp(r"^!?(хелп|допомога)", flags=0))(
+        self.router.message(F.text.regexp(r"^[!/](хелп|допомога)", flags=0))(
             self.cmd_help
         )
         self.router.callback_query(F.data.startswith("help_"))(
@@ -74,28 +74,28 @@ class UserHandler(BaseHandler):
         import re
 
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r"^\s*!?анрег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]анрег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_unreg
         )
 
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
         self.router.message(
-            F.text.regexp(r"^\s*!?суперанрег(\s|$)", flags=re.IGNORECASE)
+            F.text.regexp(r"^\s*[!/]суперанрег(\s|$)", flags=re.IGNORECASE)
         )(self.cmd_superunreg)
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
         self.router.message(
-            F.text.regexp(r"^\s*!?суперпуперанрег(\s|$)", flags=re.IGNORECASE)
+            F.text.regexp(r"^\s*[!/]суперпуперанрег(\s|$)", flags=re.IGNORECASE)
         )(self.cmd_superpuperunreg)
 
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r"^\s*!?рег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]рег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_reg
         )
 
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
-        self.router.message(F.text.regexp(r"^\s*!?ганрег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]ганрег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_global_unreg
         )
 
@@ -106,11 +106,11 @@ class UserHandler(BaseHandler):
 
         self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
         self.router.message(
-            F.text.regexp(r"^\s*!?гсуперанрег(\s|$)", flags=re.IGNORECASE)
+            F.text.regexp(r"^\s*[!/]гсуперанрег(\s|$)", flags=re.IGNORECASE)
         )(self.cmd_global_superunreg)
 
         self.router.message(Command("greg"))(self.cmd_global_reg)
-        self.router.message(F.text.regexp(r"^\s*!?грег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]грег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_global_reg
         )
 

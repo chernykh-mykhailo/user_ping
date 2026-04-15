@@ -43,34 +43,34 @@ class PingHandler(BaseHandler):
         """Реєструє хендлери пінгування"""
         # Базові виклики
         self.router.message(Command("all"))(self.cmd_all)
-        self.router.message(F.text.regexp(r"^!?кнагє", flags=0))(self.cmd_all)
+        self.router.message(F.text.regexp(r"^[!/]кнагє", flags=0))(self.cmd_all)
 
         self.router.message(Command("emoji"))(self.cmd_emoji)
-        self.router.message(F.text.regexp(r"^!?емодзі", flags=0))(self.cmd_emoji)
+        self.router.message(F.text.regexp(r"^[!/]емодзі", flags=0))(self.cmd_emoji)
 
         # Нові команди v1.1.0
         self.router.message(Command("admins"))(self.cmd_admins)
-        self.router.message(F.text.regexp(r"^!?адміни", flags=0))(self.cmd_admins)
+        self.router.message(F.text.regexp(r"^[!/]адміни", flags=0))(self.cmd_admins)
 
         self.router.message(Command("anybody"))(self.cmd_anybody)
-        self.router.message(F.text.regexp(r"^!?хтось", flags=0))(self.cmd_anybody)
+        self.router.message(F.text.regexp(r"^[!/]хтось", flags=0))(self.cmd_anybody)
 
         self.router.message(Command("active"))(self.cmd_active)
-        self.router.message(F.text.regexp(r"^!?активні", flags=0))(self.cmd_active)
+        self.router.message(F.text.regexp(r"^[!/]активні", flags=0))(self.cmd_active)
 
         self.router.message(Command("active_week"))(self.cmd_active_week)
-        self.router.message(F.text.regexp(r"^!?актив_тиждень", flags=0))(
+        self.router.message(F.text.regexp(r"^[!/]актив_тиждень", flags=0))(
             self.cmd_active_week
         )
 
         self.router.message(Command("writers"))(self.cmd_writers)
-        self.router.message(F.text.regexp(r"^!?писали", flags=0))(self.cmd_writers)
+        self.router.message(F.text.regexp(r"^[!/]писали", flags=0))(self.cmd_writers)
 
         self.router.message(Command("online"))(self.cmd_online)
-        self.router.message(F.text.regexp(r"^!?онлайн", flags=0))(self.cmd_online)
+        self.router.message(F.text.regexp(r"^[!/]онлайн", flags=0))(self.cmd_online)
 
         self.router.message(Command("stop", "stopcall"))(self.cmd_stop)
-        self.router.message(F.text.regexp(r"^!?стоп", flags=0))(self.cmd_stop)
+        self.router.message(F.text.regexp(r"^[!/]стоп", flags=0))(self.cmd_stop)
 
         # Sticker Handler
         self.router.message(Command("set_sticker"))(self.cmd_set_sticker)
@@ -592,9 +592,10 @@ class PingHandler(BaseHandler):
                     sent_message = None
                     while not sent_message:
                         try:
-                            # v2.10.8: Використовуємо HTML для кращої підтримки Custom Emoji
+                            # v2.10.25: НЕ ескейпимо call_text тут, бо він може містити HTML розмітку від хендлерів
+                            # Але ескейпимо лічильник, щоб бути в безпеці
                             text_parts = [
-                                f"{html.escape(call_text)}{html.escape(count_text)}\n\n"
+                                f"{call_text}{html.escape(count_text)}\n\n"
                             ]
 
                             for mention_data in mentions:
@@ -893,8 +894,10 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
+
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "📣 Увага!"
+        user_text = parts[1] if len(parts) > 1 else "📣 Увага!"
 
         # Перевірка на шаблон
         if len(parts) > 1:
@@ -903,7 +906,13 @@ class PingHandler(BaseHandler):
             template_name = parts[1].strip()
 
             if template_name in templates:
+                # Шаблон може містити HTML (наприклад, <b>), тому ми його НЕ ескейпимо 
+                # (власник шаблону сам відповідає за валідність HTML)
                 call_text = templates[template_name]
+            else:
+                call_text = html.escape(user_text)
+        else:
+            call_text = html.escape(user_text)
 
         chat_id = get_clean_chat_id(message.chat.id)
         users = self.chat_repo.get_active_users(chat_id)
@@ -931,8 +940,9 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "📣 Увага!"
+        call_text = html.escape(parts[1]) if len(parts) > 1 else "📣 Увага!"
 
         chat_id = get_clean_chat_id(message.chat.id)
         users = self.chat_repo.get_active_users(chat_id)
@@ -951,8 +961,9 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "📣 Виклик адмінів!"
+        call_text = html.escape(parts[1]) if len(parts) > 1 else "📣 Виклик адмінів!"
 
         admin_users = await self._get_admin_users(message.chat.id)
 
@@ -974,8 +985,9 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "🔥 Виклик найактивніших!"
+        call_text = html.escape(parts[1]) if len(parts) > 1 else "🔥 Виклик найактивніших!"
 
         chat_id = get_clean_chat_id(message.chat.id)
         recent_users = await self._get_recently_active_users(chat_id, hours=24)
@@ -1001,8 +1013,9 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "📅 Виклик активних за тиждень!"
+        call_text = html.escape(parts[1]) if len(parts) > 1 else "📅 Виклик активних за тиждень!"
 
         chat_id = get_clean_chat_id(message.chat.id)
         recent_users = await self._get_recently_active_users(
@@ -1028,8 +1041,9 @@ class PingHandler(BaseHandler):
         if not await self._is_admin(message.chat.id, message.from_user.id):
             return
 
+        import html
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "✍️ Виклик тих, хто спілкувався!"
+        call_text = html.escape(parts[1]) if len(parts) > 1 else "✍️ Виклик тих, хто спілкувався!"
 
         chat_id = get_clean_chat_id(message.chat.id)
         users = await self._get_filtered_users(chat_id, source="message", hours=24)
@@ -1052,8 +1066,6 @@ class PingHandler(BaseHandler):
             return
 
         parts = message.text.split(maxsplit=1)
-        call_text = parts[1] if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
-
         chat_id = get_clean_chat_id(message.chat.id)
 
         # v2.10.24: Гібридний підхід — UserBot + База (Профілі + Активність)
@@ -1097,8 +1109,15 @@ class PingHandler(BaseHandler):
         elif active_writers:
             prefix = "🕒 <i>(За активністю в чаті)</i>\n"
 
+        import html
+
+        # Текст користувача ескейпимо окремо, а префікс має бути сирим HTML (v2.10.25)
+        user_text = html.escape(parts[1]) if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
+        
         if prefix:
-            call_text = prefix + call_text
+            call_text = prefix + user_text
+        else:
+            call_text = user_text
 
         await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
         await self.auto_cleanup(message)
@@ -1209,6 +1228,14 @@ class PingHandler(BaseHandler):
             return
 
         chat_id = get_clean_chat_id(message.chat.id)
+
+        # v2.10.25: Перевіряємо чи є активний виклик перед тим як писати про зупинку
+        if chat_id not in self._active_pings:
+            # Якщо виклику немає, просто видаляємо команду стоп без зайвих повідомлень (або можна відповісти)
+            # await message.reply("ℹ️ Зараз немає активних викликів.")
+            await self.auto_cleanup(message)
+            return
+
         self.chat_repo.set_stop_flag(chat_id, True)
         sent = await message.answer("⏸ Зупинка виклику...")
         await self.auto_cleanup(message, sent)
