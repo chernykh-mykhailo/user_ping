@@ -523,7 +523,7 @@ class PingHandler(BaseHandler):
                         #    - У команді з іменами (/all) - нічого не додаємо (просто ім'я).
                         #    - У команді БЕЗ імен (/emoji) - ставимо рандомний емодзі, щоб не палити ім'я.
                         emoji_label = personal
-                        if not emoji_label and not show_names:
+                        if not emoji_label:
                             emoji_label = random.choice(EMOJIS)
 
                         # v2.10.4: ПРЕМІУМ-ЕМОДЗІ - зберігаємо ID для entities
@@ -1455,9 +1455,10 @@ class PingHandler(BaseHandler):
 
         trigger_name = match.group(1)
 
-        # v2.10.26: Автоматичне витягування емодзі з назви (наприклад: !addcall croco🐊)
+        # v2.10.28: Покращене автоматичне витягування емодзі (будь-де у слові)
         import re
-        emoji_at_end = re.search(r'([^\w\s\d]+)$', trigger_name)
+        # Шукаємо перший символ-не-слово (емодзі)
+        emoji_match = re.search(r'([^\w\s\d])', trigger_name)
         
         custom_id = extract_custom_emoji_id(message)
         if custom_id:
@@ -1465,11 +1466,12 @@ class PingHandler(BaseHandler):
         else:
             emoji = match.group(2).strip() if match.group(2) else None
 
-        if not emoji and emoji_at_end:
-            emoji = emoji_at_end.group(1)
-            trigger_name = trigger_name[:emoji_at_end.start()].strip()
+        if not emoji and emoji_match:
+            emoji = emoji_match.group(1)
+            # Видаляємо емодзі з назви тригера
+            trigger_name = trigger_name.replace(emoji, "").strip()
             if not trigger_name:
-                trigger_name = emoji_at_end.group(1)
+                trigger_name = emoji
                 emoji = None
 
         chat_id = get_clean_chat_id(message.chat.id)

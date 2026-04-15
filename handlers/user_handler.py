@@ -29,6 +29,7 @@ from config import (
     REFERRAL_BONUS_PREMIUM,
     ADMIN_USER_ID,
 )
+import re
 from __version__ import __version__
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
 
@@ -70,34 +71,28 @@ class UserHandler(BaseHandler):
             ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR))
         )(self.on_bot_join)
 
-        # Unreg/Reg - case-insensitive for Ukrainian commands (Анрег = анрег)
-        import re
-
+        # Unreg/Reg - case-insensitive without shadowing (v2.10.28)
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r"^\s*[!/]?анрег(\s|$)", flags=re.IGNORECASE))(
-            self.cmd_unreg
-        )
+        self.router.message(F.text.regexp(r"^[!/]?анрег\b", re.I))(self.cmd_unreg)
+        self.router.message(F.text.regexp(r"^[!/]?unreg\b", re.I))(self.cmd_unreg)
 
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
-        self.router.message(
-            F.text.regexp(r"^\s*[!/]?суперанрег(\s|$)", flags=re.IGNORECASE)
-        )(self.cmd_superunreg)
+        self.router.message(F.text.regexp(r"^[!/]?суперанрег\b", re.I))(self.cmd_superunreg)
+        self.router.message(F.text.regexp(r"^[!/]?superunreg\b", re.I))(self.cmd_superunreg)
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
-        self.router.message(
-            F.text.regexp(r"^\s*[!/]суперпуперанрег(\s|$)", flags=re.IGNORECASE)
-        )(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(r"^[!/]суперпуперанрег\b", re.I))(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(r"^[!/]superpuperunreg\b", re.I))(self.cmd_superpuperunreg)
 
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r"^\s*[!/]?рег(\s|$)", flags=re.IGNORECASE))(
-            self.cmd_reg
-        )
+        self.router.message(F.text.regexp(r"^[!/]?рег\b", re.I))(self.cmd_reg)
+        self.router.message(F.text.regexp(r"^[!/]?reg\b", re.I))(self.cmd_reg)
 
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
-        self.router.message(F.text.regexp(r"^\s*[!/]?ганрег(\s|$)", flags=re.IGNORECASE))(
-            self.cmd_global_unreg
-        )
+        self.router.message(
+            F.text.regexp(r"^[!/]?ганрег(\b|$)|^[!/]?gunreg(\b|$)", flags=re.IGNORECASE)
+        )(self.cmd_global_unreg)
 
         # Set Emoji Callbacks
         self.router.callback_query(F.data.startswith("set_emoji:"))(
