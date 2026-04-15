@@ -1437,12 +1437,22 @@ class PingHandler(BaseHandler):
 
         trigger_name = match.group(1)
 
-        # Check for premium emoji
+        # v2.10.26: Автоматичне витягування емодзі з назви (наприклад: !addcall croco🐊)
+        import re
+        emoji_at_end = re.search(r'([^\w\s\d]+)$', trigger_name)
+        
         custom_id = extract_custom_emoji_id(message)
         if custom_id:
             emoji = f"tg-emoji:{custom_id}"
         else:
             emoji = match.group(2).strip() if match.group(2) else None
+
+        if not emoji and emoji_at_end:
+            emoji = emoji_at_end.group(1)
+            trigger_name = trigger_name[:emoji_at_end.start()].strip()
+            if not trigger_name:
+                trigger_name = emoji_at_end.group(1)
+                emoji = None
 
         chat_id = get_clean_chat_id(message.chat.id)
 
