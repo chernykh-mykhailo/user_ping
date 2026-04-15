@@ -117,6 +117,19 @@ class UserActivityDomain:
         chat_data = self._get_chat_data(chat_id)
         return list(chat_data.get("users", {}).keys())
 
+    def get_all_users_with_names(self, chat_id: str) -> Dict[str, str]:
+        """Повертає ВСІХ користувачів з іменами (без фільтрації)"""
+        chat_data = self._get_chat_data(chat_id)
+        users = chat_data.get("users", {})
+        
+        result = {}
+        for uid, udata in users.items():
+            if isinstance(udata, dict):
+                result[uid] = udata.get("name", f"User {uid}")
+            else:
+                result[uid] = f"User {uid}"
+        return result
+
     def get_user_setting(self, user_id: str, key: str, default: Any = None) -> Any:
         """Gets user-specific setting (global)"""
         data = self.storage.load()

@@ -552,12 +552,22 @@ class PingHandler(BaseHandler):
                             safe_name = html.escape(user_name)
                             mentions.append(("text", safe_name, uid, user_name))
                     else:
-                        # v2.9.0: Fix for special characters in names breaking HTML
-                        import html
-
-                        safe_label = html.escape(str(label))
-                        # Зберігаємо як tuple для сумісності з новою логікою
-                        mentions.append(("text", safe_label, uid, user_name))
+                        # v2.10.26: У виклику з іменами (/all) також додаємо персональний емодзі поруч
+                        personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
+                        
+                        if personal:
+                            if str(personal).startswith("tg-emoji:"):
+                                emoji_id = str(personal).split(":")[1]
+                                alt = self.chat_repo.emoji_packs.get_registered_emoji_alt(emoji_id) or "✨"
+                                mentions.append(("custom_emoji", emoji_id, uid, user_name, alt))
+                            else:
+                                import html
+                                safe_emoji = html.escape(str(personal))
+                                mentions.append(("regular", safe_emoji, uid, user_name))
+                        else:
+                            import html
+                            safe_label = html.escape(str(label))
+                            mentions.append(("text", safe_label, uid, user_name))
 
                 try:
                     # Визначаємо чи потрібна кнопка стоп
@@ -972,7 +982,8 @@ class PingHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
-        await self._send_pings(message.chat.id, admin_users, call_text, use_emoji=False)
+        await self._send_pings(message.chat.id, admin_users, call_text, use_emoji=True, show_names=True)
+
         # Чистимо саму команду
         await self.auto_cleanup(message)
 
@@ -1003,7 +1014,7 @@ class PingHandler(BaseHandler):
             return
 
         await self._send_pings(
-            message.chat.id, recent_users, call_text, use_emoji=False
+            message.chat.id, recent_users, call_text, use_emoji=True, show_names=True
         )
         await self.auto_cleanup(message)
 
@@ -1038,7 +1049,7 @@ class PingHandler(BaseHandler):
             return
 
         await self._send_pings(
-            message.chat.id, recent_users, call_text, use_emoji=False
+            message.chat.id, recent_users, call_text, use_emoji=True, show_names=True
         )
         await self.auto_cleanup(message)
 
@@ -1068,7 +1079,7 @@ class PingHandler(BaseHandler):
             await self.auto_cleanup(message, sent)
             return
 
-        await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        await self._send_pings(message.chat.id, users, call_text, use_emoji=True, show_names=True)
         await self.auto_cleanup(message)
 
     async def cmd_online(self, message: Message):
@@ -1134,7 +1145,7 @@ class PingHandler(BaseHandler):
         else:
             call_text = user_text
 
-        await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
+        await self._send_pings(message.chat.id, users, call_text, use_emoji=True, show_names=True)
         await self.auto_cleanup(message)
 
     async def _get_filtered_users(
@@ -1234,6 +1245,7 @@ class PingHandler(BaseHandler):
 
         # Чистимо команду та результат
         await self.auto_cleanup(message, sent)
+
 
     async def cmd_stop(self, message: Message):
         """Зупиняє активний виклик"""
@@ -1410,7 +1422,13 @@ class PingHandler(BaseHandler):
         user_list = ""
         for uid in user_ids:
             name = all_users.get(uid, f"User {uid}")
-            user_list += f"• {name}\n"
+            # v2.10.26: Додаємо емодзі премів
+            personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
+            emoji_prefix = ""
+            if personal:
+                emoji_prefix = f"{render_emoji(personal)} "
+            
+            user_list += f"• {emoji_prefix}{name}\n"
 
         emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
         info = (
@@ -1553,7 +1571,6 @@ class PingHandler(BaseHandler):
             return
 
         import re
-
         match = re.search(r"^!deluser\s+(\S+)", message.text)
         if not match:
             await message.answer("❌ Вкажіть назву тригера")
@@ -1581,305 +1598,137 @@ class PingHandler(BaseHandler):
             return
 
         import re
-
         match = re.search(r"^!(\S+)$", message.text)
         if not match:
             return
 
         trigger_name = match.group(1)
-
-        # Ігноруємо системні команди
-        system_commands = [
-            "кнагє",
-            "емодзі",
-            "адміни",
-            "хтось",
-            "стоп",
-            "збір",
-            "стата",
-            "анрег",
-            "суперанрег",
-            "рег",
-            "calls",
-            "cpatterns",
-            "upatterns",
-        ]
+        system_commands = ["кнагє", "емодзі", "адміни", "хтось", "стоп", "збір", "стата", "анрег", "суперанрег", "рег", "calls", "cpatterns", "upatterns"]
         if trigger_name.lower() in system_commands:
             return
 
         chat_id = get_clean_chat_id(message.chat.id)
-
-        # 1. Перевірка на кастомний тригер (Alias для Ping All)
+        
+        # 1. Alias Check
         custom_triggers = self.chat_repo.get_custom_ping_triggers(chat_id)
-        type_ = custom_triggers.get(trigger_name.lower())
-
-        if not type_:
-            # Check global
-            global_triggers = self.chat_repo.get_global_ping_triggers()
-            type_ = global_triggers.get(trigger_name.lower())
+        type_ = custom_triggers.get(trigger_name.lower()) or self.chat_repo.get_global_ping_triggers().get(trigger_name.lower())
 
         if type_:
-            # Це аліас для пінгу всіх!
-            self.logger.info(f"Custom trigger (strict) '{trigger_name}' activated")
-
-            # Для ! trigger без тексту використовуємо дефолтний
+            self.logger.info(f"Custom trigger '{trigger_name}' activated")
             call_text = "📣 Увага!"
-
             users = self.chat_repo.get_active_users(chat_id)
-            if not users:
-                return
+            if not users: return
+            try: await message.delete()
+            except: pass
+            
+            if type_ == "active": users = await self._get_recently_active_users(chat_id, 24)
+            elif type_ == "active_week": users = await self._get_recently_active_users(chat_id, 168)
+            elif type_ == "writers": users = await self._get_filtered_users(chat_id, "message", 24)
+            elif type_ == "online": users = await self._get_filtered_users(chat_id, "profile", 24)
 
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
-            if type_ == "emoji":
-                await self._send_pings(
-                    message.chat.id, users, call_text, use_emoji=True
-                )
-            elif type_ == "active":
-                recent = await self._get_recently_active_users(chat_id, hours=24)
-                if not recent:
-                    await message.answer("ℹ️ Немає активних учасників за 24г.")
-                    return
-                await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
-                )
-            elif type_ == "active_week":
-                recent = await self._get_recently_active_users(chat_id, hours=168)
-                if not recent:
-                    await message.answer("ℹ️ Немає активних учасників за тиждень.")
-                    return
-                await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
-                )
-            elif type_ == "writers":
-                recent = await self._get_filtered_users(
-                    chat_id, source="message", hours=24
-                )
-                if not recent:
-                    await message.answer("ℹ️ Немає тих, хто писав за 24г.")
-                    return
-                await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
-                )
-            elif type_ == "online":
-                recent = await self._get_filtered_users(
-                    chat_id, source="profile", hours=24
-                )
-                if not recent:
-                    await message.answer("ℹ️ Немає онлайн за 24г.")
-                    return
-                await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
-                )
-            else:
-                await self._send_pings(
-                    message.chat.id, users, call_text, use_emoji=False
-                )
+            await self._send_pings(message.chat.id, users, call_text, use_emoji=True, show_names=True)
             return
 
-        # 2. Перевірка на групу користувачів
+        # 2. Group Check
         user_ids = self.chat_repo.get_trigger_users(chat_id, trigger_name)
+        if not user_ids: return
 
-        if not user_ids:
-            # Тихо ігноруємо, якщо тригер не знайдено
-            return
-
-        # Отримуємо імена користувачів
-        all_users = self.chat_repo.get_active_users(chat_id)
-
-        trigger_users = {}
-        for uid, name in all_users.items():
-            if uid in user_ids:
-                trigger_users[uid] = name
+        all_users = self.chat_repo.get_all_users_with_names(chat_id)
+        trigger_users = {uid: name for uid, name in all_users.items() if uid in user_ids}
 
         if not trigger_users:
-            await message.answer(
-                f"❌ Тригер <code>!{trigger_name}</code> порожній", parse_mode="HTML"
-            )
+            await message.answer(f"❌ Тригер <code>!{trigger_name}</code> порожній", parse_mode="HTML")
             return
 
-        try:
-            await message.delete()
-        except Exception:
-            pass
+        try: await message.delete()
+        except: pass
 
-        call_text = f"🎯 Тригер: {trigger_name}"
-        await self._send_pings(
-            message.chat.id, trigger_users, call_text, use_emoji=False
-        )
-
-    # === Self-Service Roles v1.3.0 ===
+        await self._send_pings(message.chat.id, trigger_users, f"🎯 Тригер: {trigger_name}", use_emoji=True, show_names=True)
 
     async def cmd_roles_panel(self, message: Message):
-        """Створює панель самореєстрації на тригери"""
-        if not await self._is_admin(message.chat.id, message.from_user.id):
-            return
-
+        """Створює панель самореєстрації"""
+        if not await self._is_admin(message.chat.id, message.from_user.id): return
         chat_id = get_clean_chat_id(message.chat.id)
         triggers = self.chat_repo.get_call_triggers(chat_id)
-
         if not triggers:
-            await message.answer(
-                "❌ Немає створених тригерів.\n\n"
-                "Спочатку створіть тригери:\n"
-                "<code>!addcall croco</code>\n"
-                "<code>!set_role_emoji croco 🐊</code>",
-                parse_mode="HTML",
-            )
+            await message.answer("❌ Немає тригерів. Створіть через !addcall", parse_mode="HTML")
             return
 
-        # Отримуємо емодзі для тригерів
         emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
-
-        # Створюємо кнопки
         buttons = []
         row = []
-
-        for trigger_name in sorted(triggers.keys()):
-            emoji = emojis.get(trigger_name, "🎯")
-            button_text = f"{emoji} {trigger_name.capitalize()}"
-            callback_data = f"role_{trigger_name}"
-
-            row.append(
-                InlineKeyboardButton(text=button_text, callback_data=callback_data)
-            )
-
-            # По 2 кнопки в ряд
+        for t in sorted(triggers.keys()):
+            emoji = emojis.get(t, "🎯")
+            row.append(InlineKeyboardButton(text=f"{render_emoji(emoji)} {t.capitalize()}", callback_data=f"role_{t}"))
             if len(row) == 2:
                 buttons.append(row)
                 row = []
+        if row: buttons.append(row)
 
-        # Додаємо останній ряд якщо є
-        if row:
-            buttons.append(row)
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-        panel_text = (
-            "🎮 <b>Панель реєстрації</b>\n\n"
-            "Оберіть ігри/події, на які хочете отримувати сповіщення:\n\n"
-            "<i>Натисніть кнопку щоб зареєструватись або вийти</i>"
-        )
-
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        await self.bot.send_message(
-            message.chat.id, panel_text, reply_markup=keyboard, parse_mode="HTML"
-        )
+        try: await message.delete()
+        except: pass
+        await self.bot.send_message(message.chat.id, "🎮 <b>Панель реєстрації</b>\n\nОберіть ролі щоб отримувати сповіщення:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
     async def cmd_set_role_emoji(self, message: Message):
-        """Встановлює емодзі для тригера"""
-        if not await self._is_admin(message.chat.id, message.from_user.id):
-            return
-
+        """Встановлює емодзі для ролі"""
+        if not await self._is_admin(message.chat.id, message.from_user.id): return
         import re
-
         match = re.search(r"^!set_role_emoji\s+(\S+)", message.text)
         if not match:
-            await message.answer(
-                "❌ Вкажіть назву тригера.\n\n"
-                "Використання: <code>!set_role_emoji назва емодзі</code>",
-                parse_mode="HTML",
-            )
+            await message.answer("❌ Формат: !set_role_emoji назва 🎯")
             return
-
+        
         trigger_name = match.group(1)
-
-        # 1. Спроба витягти преміум-емодзі
         custom_id = extract_custom_emoji_id(message)
-        if custom_id:
-            emoji = f"tg-emoji:{custom_id}"
-        else:
-            # 2. Розібрати звичайний текст
-            parts = message.text.split(maxsplit=2)
-            if len(parts) < 3:
-                await message.answer("❌ Вкажіть емодзі.")
-                return
-            emoji = parts[2].strip()
-
+        emoji = f"tg-emoji:{custom_id}" if custom_id else message.text.split()[-1]
+        
         chat_id = get_clean_chat_id(message.chat.id)
-
         if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
-            display_emoji = render_emoji(emoji)
-            await message.answer(
-                f"✅ Емодзі для тригера <code>!{trigger_name}</code> встановлено: {display_emoji}\n\n"
-                f"Оновіть панель: <code>!roles_panel</code>",
-                parse_mode="HTML",
-            )
+            await message.answer(f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}", parse_mode="HTML")
         else:
-            await message.answer(
-                f"❌ Тригер <code>!{trigger_name}</code> не знайдено", parse_mode="HTML"
-            )
+            await message.answer("❌ Помилка встановлення")
 
     async def callback_role_toggle(self, callback: CallbackQuery):
-        """Обробляє натискання кнопки реєстрації"""
-        trigger_name = callback.data.replace("role_", "")
-        user_id = str(callback.from_user.id)
-        chat_id = get_clean_chat_id(callback.message.chat.id)
-
-        # Перевіряємо чи користувач вже в тригері
-        trigger_users = self.chat_repo.get_trigger_users(chat_id, trigger_name)
-
-        if user_id in trigger_users:
-            # Видаляємо
-            self.chat_repo.remove_user_from_trigger(chat_id, trigger_name, user_id)
-            emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name)
-            try:
-                await callback.answer(
-                    f"❌ Ви вийшли з {emoji} {trigger_name}", show_alert=False
-                )
-            except TelegramBadRequest:
-                pass
+        """Тобл реєстрації користувача"""
+        trigger = callback.data.replace("role_", "")
+        uid = str(callback.from_user.id)
+        cid = get_clean_chat_id(callback.message.chat.id)
+        users = self.chat_repo.get_trigger_users(cid, trigger)
+        
+        if uid in users:
+            self.chat_repo.remove_user_from_trigger(cid, trigger, uid)
+            await callback.answer(f"❌ Ви вийшли з !{trigger}")
         else:
-            # Додаємо
-            self.chat_repo.add_user_to_trigger(chat_id, trigger_name, user_id)
-            emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name)
-            try:
-                await callback.answer(
-                    f"✅ Ви зареєструвались на {emoji} {trigger_name}!",
-                    show_alert=False,
-                )
-            except TelegramBadRequest:
-                pass
-
-        # Оновлюємо панель з поточним статусом
-        await self._update_roles_panel(callback.message, chat_id, user_id)
+            self.chat_repo.add_user_to_trigger(cid, trigger, uid)
+            await callback.answer(f"✅ Ви підписались на !{trigger}")
+        
+        await self._update_roles_panel(callback.message, cid, uid)
 
     async def _update_roles_panel(self, message: Message, chat_id: str, user_id: str):
-        """Оновлює панель ролей з позначками"""
+        """Оновлює повідомлення панелі ролей з урахуванням вибору користувача"""
         triggers = self.chat_repo.get_call_triggers(chat_id)
-        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
+        if not triggers:
+            return
 
-        # Створюємо кнопки з позначками
+        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
+        user_roles = []
+        for t in triggers.keys():
+            uids = self.chat_repo.get_trigger_users(chat_id, t)
+            if str(user_id) in uids:
+                user_roles.append(t)
+
         buttons = []
         row = []
-
-        for trigger_name in sorted(triggers.keys()):
-            emoji = emojis.get(trigger_name, "🎯")
-            trigger_users = self.chat_repo.get_trigger_users(chat_id, trigger_name)
-
-            # Додаємо ✅ якщо користувач зареєстрований
-            if user_id in trigger_users:
-                button_text = f"✅ {emoji} {trigger_name.capitalize()}"
-            else:
-                button_text = f"{emoji} {trigger_name.capitalize()}"
-
-            callback_data = f"role_{trigger_name}"
-
+        for t in sorted(triggers.keys()):
+            emoji = emojis.get(t, "🎯")
+            is_reg = t in user_roles
+            label = f"{'✅ ' if is_reg else ''}{render_emoji(emoji)} {t.capitalize()}"
             row.append(
-                InlineKeyboardButton(text=button_text, callback_data=callback_data)
+                InlineKeyboardButton(text=label, callback_data=f"role_{t}")
             )
-
             if len(row) == 2:
                 buttons.append(row)
                 row = []
-
         if row:
             buttons.append(row)
 
@@ -2060,7 +1909,7 @@ class PingHandler(BaseHandler):
 
         self.chat_repo.add_custom_ping_trigger(chat_id, trigger, "online")
         await message.answer(
-            f"✅ Додано тригер виклику (онлайн): `{trigger}`", parse_mode="Markdown"
+            f"✅ Додано тригер виклику (online): `{trigger}`", parse_mode="Markdown"
         )
 
     async def cmd_del_custom_trigger(self, message: Message):
@@ -2170,7 +2019,7 @@ class PingHandler(BaseHandler):
 
             if found_type == "emoji":
                 await self._send_pings(
-                    message.chat.id, users, call_text, use_emoji=True
+                    message.chat.id, users, call_text, use_emoji=True, show_names=True
                 )
             elif found_type == "active":
                 recent = await self._get_recently_active_users(chat_id, hours=24)
@@ -2179,7 +2028,7 @@ class PingHandler(BaseHandler):
                     await self.auto_cleanup(sent)
                     return
                 await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
+                    message.chat.id, recent, call_text, use_emoji=True, show_names=True
                 )
             elif found_type == "active_week":
                 recent = await self._get_recently_active_users(chat_id, hours=168)
@@ -2190,7 +2039,7 @@ class PingHandler(BaseHandler):
                     await self.auto_cleanup(sent)
                     return
                 await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
+                    message.chat.id, recent, call_text, use_emoji=True, show_names=True
                 )
             elif found_type == "writers":
                 recent = await self._get_filtered_users(
@@ -2201,7 +2050,7 @@ class PingHandler(BaseHandler):
                     await self.auto_cleanup(sent)
                     return
                 await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
+                    message.chat.id, recent, call_text, use_emoji=True, show_names=True
                 )
             elif found_type == "online":
                 recent = await self._get_filtered_users(
@@ -2212,9 +2061,31 @@ class PingHandler(BaseHandler):
                     await self.auto_cleanup(sent)
                     return
                 await self._send_pings(
-                    message.chat.id, recent, call_text, use_emoji=False
+                    message.chat.id, recent, call_text, use_emoji=True, show_names=True
                 )
             else:
                 await self._send_pings(
-                    message.chat.id, users, call_text, use_emoji=False
+                    message.chat.id, users, call_text, use_emoji=True, show_names=True
                 )
+
+    async def auto_cleanup(self, *messages):
+        """Автоматично видаляє повідомлення через певний час"""
+        if not messages:
+            return
+
+        chat_id = get_clean_chat_id(messages[0].chat.id)
+        cleanup_time = self.chat_repo.get_setting(chat_id, "cleanup_time", 60)
+
+        # Якщо час 0 - не видаляємо
+        if cleanup_time <= 0:
+            return
+
+        await asyncio.sleep(cleanup_time)
+
+        for msg in messages:
+            if not msg:
+                continue
+            try:
+                await msg.delete()
+            except Exception:
+                pass

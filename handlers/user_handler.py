@@ -674,10 +674,27 @@ class UserHandler(BaseHandler):
                 pass
             return
 
-        # Check for quote
+        # Check for quote or trigger
         quote = None
         args = message.text.split(maxsplit=1)
         if len(args) > 1:
+            potential_trigger = args[1].strip().lower().lstrip("!/")
+            triggers = self.chat_repo.get_call_triggers(chat_id)
+            
+            # v2.10.26: Якщо це тригер - виходимо з нього
+            if potential_trigger in triggers:
+                if self.chat_repo.remove_user_from_trigger(chat_id, potential_trigger, user_id):
+                    emoji = self.chat_repo.get_trigger_emoji(chat_id, potential_trigger) or ""
+                    sent = await message.answer(
+                        f"❌ Ви вийшли з ролі {render_emoji(emoji)} <code>!{potential_trigger}</code>",
+                        parse_mode="HTML"
+                    )
+                else:
+                    sent = await message.answer(f"ℹ️ Ви і так не підписані на <code>!{potential_trigger}</code>", parse_mode="HTML")
+                await self.auto_cleanup(message, sent)
+                return
+            
+            # Якщо не тригер - це цитата для загального анрегу
             quote = args[1].strip()
 
         # Logic for quote permissions
@@ -924,11 +941,32 @@ class UserHandler(BaseHandler):
         await self.auto_cleanup(message, sent, custom_delay=60)
 
     async def cmd_reg(self, message: Message):
-        """Увімкнює пінги назад"""
+        """Увімкнює пінги назад або реєструє на роль"""
         chat_id = get_clean_chat_id(message.chat.id)
         user_id = str(message.from_user.id)
 
-        # Перевіряємо глобальний статус перед змінами (v2.10.18: для кращого фідбеку)
+        # v2.10.26: Перевірка на роль (якщо є аргумент)
+        args = message.text.split(maxsplit=1)
+        if len(args) > 1:
+            trigger_name = args[1].strip().lower()
+            # Прибираємо ! або / з назви, якщо юзер ввів !reg !мафія
+            trigger_name = trigger_name.lstrip("!/")
+            
+            triggers = self.chat_repo.get_call_triggers(chat_id)
+            if trigger_name in triggers:
+                if self.chat_repo.add_user_to_trigger(chat_id, trigger_name, user_id):
+                    emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
+                    sent = await message.answer(
+                        f"✅ Ви підписалися на роль {render_emoji(emoji)} <code>!{trigger_name}</code>",
+                        parse_mode="HTML"
+                    )
+                else:
+                    sent = await message.answer(f"ℹ️ Ви вже підписані на <code>!{trigger_name}</code>", parse_mode="HTML")
+                await self.auto_cleanup(message, sent)
+                return
+
+        # Стандартна логіка загального рега (знімає анрег)
+        # Перевіряємо глобальний статус перед змінами
         glob_status = self.chat_repo.is_globally_unreg(user_id)
         is_glob_unreg = glob_status["temp"] or glob_status["super"]
 

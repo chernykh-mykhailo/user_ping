@@ -107,6 +107,10 @@ class ChatRepository:
         """Returns all user IDs in chat (v2.6.5)"""
         return self.activity.get_all_user_ids(chat_id)
 
+    def get_all_users_with_names(self, chat_id: str) -> Dict[str, str]:
+        """Повертає ВСІХ користувачів з іменами (включаючи тих, хто в анрегу)"""
+        return self.activity.get_all_users_with_names(chat_id)
+
     def get_all_chats(self) -> List[str]:
         """Returns all chat IDs"""
         return self.activity.get_all_chats()
