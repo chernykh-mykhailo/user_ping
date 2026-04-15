@@ -104,7 +104,9 @@ class PingBot:
 
         self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo, self.bot))
 
-        self.ping_handler = PingHandler(self.chat_repo, self.premium_repo, self.bot)
+        self.ping_handler = PingHandler(
+            self.chat_repo, self.premium_repo, self.bot, self.userbot, self.use_userbot
+        )
 
         self.user_handler = UserHandler(
             self.chat_repo, self.premium_repo, self.emoji_service, self.bot

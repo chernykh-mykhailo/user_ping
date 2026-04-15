@@ -29,10 +29,14 @@ class PingHandler(BaseHandler):
     Single Responsibility: тільки пінги
     """
 
-    def __init__(self, chat_repo, premium_repo, bot: Bot):
+    def __init__(
+        self, chat_repo, premium_repo, bot: Bot, userbot=None, use_userbot=False
+    ):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
         self._active_pings = set()
+        self.userbot = userbot
+        self.use_userbot = use_userbot
         super().__init__(chat_repo, premium_repo)
 
     def register_handlers(self):
@@ -1041,7 +1045,7 @@ class PingHandler(BaseHandler):
         await self.auto_cleanup(message)
 
     async def cmd_online(self, message: Message):
-        """Пінгує тільки тих, хто онлайн у Telegram (24г)"""
+        """Пінгує тих, хто зараз онлайн або був активним нещодавно (v2.10.24)"""
         self.logger.info(f"Отримано команду онлайн від {message.from_user.id}")
 
         if not await self._is_admin(message.chat.id, message.from_user.id):
@@ -1051,12 +1055,50 @@ class PingHandler(BaseHandler):
         call_text = parts[1] if len(parts) > 1 else "🌐 Виклик тих, хто в мережі!"
 
         chat_id = get_clean_chat_id(message.chat.id)
-        users = await self._get_filtered_users(chat_id, source="profile", hours=24)
+
+        # v2.10.24: Гібридний підхід — UserBot + База (Профілі + Активність)
+        users = {}
+        using_userbot = False
+
+        # 1. Спроба через UserBot (найсвіжіші дані)
+        if self.use_userbot and self.userbot:
+            try:
+                bot_users = await self.userbot.get_online_users(message.chat.id)
+                if bot_users:
+                    users.update(bot_users)
+                    using_userbot = True
+            except Exception as e:
+                self.logger.error(f"Userbot online check failed: {e}")
+
+        # 2. Додаємо тих, хто писав у чат недавно (3 години) — фікс приватності
+        # Бо навіть якщо статус приховано, факт повідомлення — це активність
+        active_writers = await self._get_filtered_users(
+            chat_id, source="message", hours=3
+        )
+        users.update(active_writers)
+
+        # 3. Додаємо тих, чиї профілі ми бачили (24 години) як запасний варіант
+        recent_profiles = await self._get_filtered_users(
+            chat_id, source="profile", hours=24
+        )
+        users.update(recent_profiles)
 
         if not users:
-            sent = await message.answer("ℹ️ Зараз немає нікого онлайн (нещодавно).")
+            sent = await message.answer(
+                "ℹ️ Зараз немає нікого онлайн (або всі приховані)."
+            )
             await self.auto_cleanup(message, sent)
             return
+
+        # Додаємо помітку для UX
+        prefix = ""
+        if using_userbot:
+            prefix = "⚡️ <i>(Актуально через UB)</i>\n"
+        elif active_writers:
+            prefix = "🕒 <i>(За активністю в чаті)</i>\n"
+
+        if prefix:
+            call_text = prefix + call_text
 
         await self._send_pings(message.chat.id, users, call_text, use_emoji=False)
         await self.auto_cleanup(message)

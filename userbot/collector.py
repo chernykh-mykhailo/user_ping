@@ -281,6 +281,76 @@ class UserbotCollector:
 
         return count
 
+    async def get_online_users(self, chat_id: int) -> dict:
+        """
+        Швидке отримання онлайн-користувачів через UserBot (v2.10.23)
+        Отримує тих, хто реально онлайн зараз + оновлює базу
+        """
+        if not self.client or not self.client.is_connected():
+            return {}
+
+        results = {}
+        clean_chat_id = get_clean_chat_id(chat_id)
+        
+        try:
+            # v2.10.23: Використовуємо filter для швидкості, якщо це можливо
+            # ChannelParticipantsOnline повертає тих, хто Online
+            async for user in self.client.iter_participants(chat_id, filter=types.ChannelParticipantsOnline):
+                if user.bot:
+                    continue
+                    
+                user_id = str(user.id)
+                name = get_user_name(
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    username=user.username,
+                    user_id=user.id,
+                )
+                results[user_id] = name
+                
+                # Попутно оновлюємо profile_seen в базі
+                self.chat_repo.save_user(
+                    clean_chat_id,
+                    user_id,
+                    name,
+                    update_unreg=False,
+                    source="profile",
+                    profile_time=datetime.now().isoformat(),
+                    username=user.username,
+                )
+                
+            # Якщо нікого не знайшли через фільтр (або це звичайна група), 
+            # спробуємо просто пробігтися по учасниках, але лімітовано
+            if not results:
+                async for user in self.client.iter_participants(chat_id, limit=200):
+                    if user.bot:
+                        continue
+                        
+                    status = user.status
+                    if isinstance(status, (types.UserStatusOnline, types.UserStatusRecently)):
+                        user_id = str(user.id)
+                        name = get_user_name(
+                            first_name=user.first_name,
+                            last_name=user.last_name,
+                            username=user.username,
+                            user_id=user.id,
+                        )
+                        results[user_id] = name
+                        
+                        self.chat_repo.save_user(
+                            clean_chat_id,
+                            user_id,
+                            name,
+                            update_unreg=False,
+                            source="profile",
+                            profile_time=datetime.now().isoformat(),
+                            username=user.username,
+                        )
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні онлайн юзерів: {e}")
+            
+        return results
+
     def _parse_user_status(self, user) -> str:
         """Перетворює статус Telethon у ISO рядок часу (v1.8.6: з офсетами)"""
         status = user.status
