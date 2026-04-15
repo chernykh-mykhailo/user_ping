@@ -48,13 +48,13 @@ class AdminHandler(BaseHandler):
     def register_handlers(self):
         """Реєструє хендлери адміністраторів"""
         self.router.message(Command("sync"))(self.cmd_sync)
-        self.router.message(F.text.regexp(r"^!?збір", flags=0))(self.cmd_sync)
+        self.router.message(F.text.regexp(r"^[!/]збір", flags=0))(self.cmd_sync)
 
         self.router.message(Command("stats"))(self.cmd_stats)
-        self.router.message(F.text.regexp(r"^!?стата", flags=0))(self.cmd_stats)
+        self.router.message(F.text.regexp(r"^[!/]стата", flags=0))(self.cmd_stats)
 
         self.router.message(Command("fullstats"))(self.cmd_fullstats)
-        self.router.message(F.text.regexp(r"^!?фулстата", flags=0))(self.cmd_fullstats)
+        self.router.message(F.text.regexp(r"^[!/]фулстата", flags=0))(self.cmd_fullstats)
 
         self.router.message(Command("admin_settings", "apanel"))(
             self.cmd_admin_settings

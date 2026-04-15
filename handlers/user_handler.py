@@ -74,13 +74,13 @@ class UserHandler(BaseHandler):
         import re
 
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(r"^\s*[!/]анрег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]?анрег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_unreg
         )
 
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
         self.router.message(
-            F.text.regexp(r"^\s*[!/]суперанрег(\s|$)", flags=re.IGNORECASE)
+            F.text.regexp(r"^\s*[!/]?суперанрег(\s|$)", flags=re.IGNORECASE)
         )(self.cmd_superunreg)
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
@@ -89,13 +89,13 @@ class UserHandler(BaseHandler):
         )(self.cmd_superpuperunreg)
 
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(r"^\s*[!/]рег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]?рег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_reg
         )
 
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
-        self.router.message(F.text.regexp(r"^\s*[!/]ганрег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]?ганрег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_global_unreg
         )
 
@@ -106,11 +106,11 @@ class UserHandler(BaseHandler):
 
         self.router.message(Command("gsuperunreg"))(self.cmd_global_superunreg)
         self.router.message(
-            F.text.regexp(r"^\s*[!/]гсуперанрег(\s|$)", flags=re.IGNORECASE)
+            F.text.regexp(r"^\s*[!/]?гсуперанрег(\s|$)", flags=re.IGNORECASE)
         )(self.cmd_global_superunreg)
 
         self.router.message(Command("greg"))(self.cmd_global_reg)
-        self.router.message(F.text.regexp(r"^\s*[!/]грег(\s|$)", flags=re.IGNORECASE))(
+        self.router.message(F.text.regexp(r"^\s*[!/]?грег(\s|$)", flags=re.IGNORECASE))(
             self.cmd_global_reg
         )
 
@@ -140,8 +140,8 @@ class UserHandler(BaseHandler):
         )(self.on_user_join)
 
         # v2.7.5: Personal Emoji
-        self.router.message(Command("setemoji"))(self.cmd_set_emoji)
-        self.router.message(F.text.startswith("!setemoji"))(self.cmd_set_emoji)
+        # v2.10.26: Тільки системні команди з префіксами / або !
+        self.router.message(Command("setemoji", prefix="/!"))(self.cmd_set_emoji)
 
         # v2.10.19: Admin forced actions
         self.router.message(Command("chat_reg"))(self.cmd_chat_reg)

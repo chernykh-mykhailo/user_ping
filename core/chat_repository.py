@@ -89,8 +89,11 @@ class ChatRepository:
                 self.storage.save(data)
 
     def remove_user(self, chat_id: str, user_id: str) -> None:
-        """Removes user"""
+        """Повне видалення юзера з усіх списків чату (v2.10.26)"""
         self.activity.remove_user(chat_id, user_id)
+        # Чистимо всі анреги юзера в цьому чаті
+        self.unreg.remove_from_unreg(chat_id, user_id)
+        self.unreg.remove_from_temp_unreg(chat_id, user_id)
 
     def get_active_users(self, chat_id: str) -> Dict[str, str]:
         """Returns active users (excluding unregged)"""

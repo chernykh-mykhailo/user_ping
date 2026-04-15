@@ -250,33 +250,12 @@ class UserbotCollector:
         # Видаляємо тих, кого немає в поточному списку учасників
         stale_users = db_users - current_members
 
-        # v2.8.3: Protection against "Hide Members" (fix user disappearance)
-        # We don't remove user if they were seen writing in the last 30 days
-        now_dt = datetime.now()
-        active_threshold = now_dt - timedelta(days=30)
-
-        # Read user data directly to check last_seen
-        chat_data = self.chat_repo.get_chat_data(clean_chat_id)
-        users_data = chat_data.get("users", {})
-
+        # v2.10.26: STRICT CLEANUP for confirmed stale users
+        # Якщо ми пройшли захист вище - значить ми бачимо список правильно, можна видаляти зайвих
         for uid in stale_users:
-            user_record = users_data.get(uid, {})
-            if isinstance(user_record, dict):
-                ls_str = user_record.get("last_seen", "2000-01-01T00:00:00")
-                try:
-                    ls_dt = datetime.fromisoformat(
-                        ls_str.replace("+00:00", "").replace("Z", "")
-                    )
-                    if ls_dt > active_threshold:
-                        # User is active but missing from member list (likely hidden)
-                        continue
-                except (ValueError, TypeError):
-                    pass
-
-            # v2.10.21: Останній шанс — якщо ім'я вже санітизоване і юзер був активний нещодавно, не чіпаємо
             self.chat_repo.remove_user(clean_chat_id, uid)
             self.logger.info(
-                f"Cleanup: Видалено неіснуючого учасника {uid} з {clean_chat_id}"
+                f"Sync Cleanup: Видалено учасника {uid} (більше не в чаті)"
             )
 
         return count
