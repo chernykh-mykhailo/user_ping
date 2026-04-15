@@ -20,7 +20,14 @@ class StringSessionManager:
         self.logger = logging.getLogger(__name__)
         
         # Створюємо папку для зберігання
-        self.storage_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.storage_file.parent.mkdir(parents=True, exist_ok=True)
+            # Перевіримо можливість запису відразу
+            test_file = self.storage_file.parent / f".write_test_{self.storage_file.name}"
+            test_file.touch()
+            test_file.unlink()
+        except Exception as e:
+            self.logger.critical(f"❌ КРИТИЧНА ПОМИЛКА: Немає прав на запис у {self.storage_file.parent}: {e}")
         
         # Ініціалізуємо файл, якщо його немає
         if not self.storage_file.exists():
@@ -38,10 +45,20 @@ class StringSessionManager:
     def _save_sessions(self, sessions: Dict[str, str]):
         """Зберігає всі сесії в JSON"""
         try:
-            with open(self.storage_file, 'w', encoding='utf-8') as f:
+            # Створюємо тимчасовий файл для безпечного запису (atomic write)
+            temp_file = self.storage_file.with_suffix('.tmp')
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(sessions, f, indent=2, ensure_ascii=False)
+                f.flush()
+                import os
+                os.fsync(f.fileno())
+            
+            # Перейменовуємо тимчасовий файл у основний
+            temp_file.replace(self.storage_file)
+            self.logger.info(f"✅ Файл сесій оновлено: {self.storage_file}")
         except Exception as e:
-            self.logger.error(f"Помилка збереження сесій: {e}")
+            self.logger.error(f"❌ ПОМИЛКА ЗБЕРЕЖЕННЯ СЕСІЙ у {self.storage_file}: {e}")
+            self.logger.error(f"Дані, які не збереглися: {list(sessions.keys())}")
     
     def get_session(self, account_name: str) -> Optional[StringSession]:
         """
