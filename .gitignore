@@ -41,6 +41,7 @@ desktop.ini
 # Telegram Sessions
 *.session
 *.session-journal
+sessions/*.json
 
 # Database & Logs
 *.db
