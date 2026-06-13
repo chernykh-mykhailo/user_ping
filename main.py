@@ -313,6 +313,7 @@ class PingBot:
                 "callback_query",
                 "chat_member",
                 "my_chat_member",
+                "pre_checkout_query",
             ]
             await self.dp.start_polling(self.bot, allowed_updates=allowed_updates)
 
