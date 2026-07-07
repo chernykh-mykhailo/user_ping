@@ -137,6 +137,7 @@ class PingHandler(BaseHandler):
         self.router.message(F.text == "!triggers")(self.cmd_list_custom_triggers)
 
         # 2. Specific System Commands
+        self.router.message(Command("roles_panel"))(self.cmd_roles_panel)
         self.router.message(F.text.regexp(re.compile(r"^!roles_panel$", re.I)))(
             self.cmd_roles_panel
         )
@@ -1763,9 +1764,9 @@ class PingHandler(BaseHandler):
         
         for t in sorted(triggers.keys()):
             emoji = emojis.get(t, "🎯")
-            # v2.11.0: Show registered count instead of checkmark
+            # v2.11.0: Show registered count without brackets
             registered_count = len(self.chat_repo.get_trigger_users(chat_id_str, t))
-            count_display = f" [{registered_count}]" if registered_count > 0 else ""
+            count_display = f" {registered_count}" if registered_count > 0 else ""
             label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
             
             row.append(
@@ -1781,8 +1782,7 @@ class PingHandler(BaseHandler):
 
         panel_text = (
             "🎮 <b>Панель реєстрації</b>\n\n"
-            "Оберіть ролі для отримання сповіщень:\n\n"
-            "<i>Цифра [] = кількість зареєстрованих</i>"
+            "Оберіть ролі для отримання сповіщень:"
         )
 
         try:
@@ -1804,9 +1804,9 @@ class PingHandler(BaseHandler):
         
         for t in sorted(triggers.keys()):
             emoji = emojis.get(t, "🎯")
-            # v2.11.0: Show registered count
+            # v2.11.0: Show registered count without brackets
             registered_count = len(self.chat_repo.get_trigger_users(chat_id, t))
-            count_display = f" [{registered_count}]" if registered_count > 0 else ""
+            count_display = f" {registered_count}" if registered_count > 0 else ""
             label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
             
             row.append(
@@ -1822,8 +1822,7 @@ class PingHandler(BaseHandler):
 
         panel_text = (
             "🎮 <b>Панель реєстрації</b>\n\n"
-            "Оберіть ролі для отримання сповіщень:\n\n"
-            "<i>Цифра [] = кількість зареєстрованих</i>"
+            "Оберіть ролі для отримання сповіщень:"
         )
 
         try:
