@@ -166,7 +166,13 @@ class PingHandler(BaseHandler):
             self.callback_admin_panel
         )
         
-        # FSM handlers for admin panel
+        # 3. Dynamic Triggers (Regex !word)
+        self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
+        self.router.message(Command("deny_unreg"))(self.cmd_deny_unreg)
+        self.router.message(Command("set_watermark"))(self.cmd_set_watermark)
+        self.router.message(F.text.regexp(re.compile(r"^!(\S+)$", re.I)))(self.cmd_call_trigger)
+
+        # FSM handlers for admin panel (MUST be before catch-all)
         from aiogram.fsm.state import State
         self.router.message(AdminStates.waiting_for_trigger_name)(
             self.handle_trigger_creation
@@ -174,12 +180,6 @@ class PingHandler(BaseHandler):
         self.router.message(AdminStates.waiting_for_emoji)(
             self.handle_emoji_input
         )
-
-        # 3. Dynamic Triggers (Regex !word)
-        self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
-        self.router.message(Command("deny_unreg"))(self.cmd_deny_unreg)
-        self.router.message(Command("set_watermark"))(self.cmd_set_watermark)
-        self.router.message(F.text.regexp(re.compile(r"^!(\S+)$", re.I)))(self.cmd_call_trigger)
 
         # 4. Generic Custom Trigger Handler (Catch-all for no-prefix words)
         # Should be LAST
@@ -2041,10 +2041,9 @@ class PingHandler(BaseHandler):
         elif data == "admin_create":
             # Set state for creating trigger
             from aiogram.fsm.context import FSMContext
-            storage = self._storage or callback.bot.storage
             state = FSMContext(
-                storage=storage,
-                key=f"admin_create_{callback.from_user.id}"
+                storage=self._storage,
+                key=(str(callback.message.chat.id), callback.from_user.id)
             )
             await state.set_state(AdminStates.waiting_for_trigger_name)
             keyboard = [[
@@ -2106,10 +2105,9 @@ class PingHandler(BaseHandler):
         elif data.startswith("admin_setemoji_"):
             trigger_name = data.replace("admin_setemoji_", "")
             from aiogram.fsm.context import FSMContext
-            storage = self._storage or callback.bot.storage
             state = FSMContext(
-                storage=storage,
-                key=f"admin_setemoji_{callback.from_user.id}"
+                storage=self._storage,
+                key=(str(callback.message.chat.id), callback.from_user.id)
             )
             await state.set_state(AdminStates.waiting_for_emoji)
             await state.update_data(trigger_name=trigger_name)
