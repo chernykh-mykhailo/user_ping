@@ -25,6 +25,12 @@ from utils.image_utils import create_summary_image
 import os
 
 
+# FSM States for Admin Panel (defined before PingHandler to avoid circular reference)
+class AdminStates(StatesGroup):
+    waiting_for_trigger_name = State()
+    waiting_for_emoji = State()
+
+
 class PingHandler(BaseHandler):
     """
     Обробляє команди пінгування
@@ -2145,111 +2151,106 @@ class PingHandler(BaseHandler):
         
         await callback.answer()
 
-# FSM States for Admin Panel
-class AdminStates(StatesGroup):
-    waiting_for_trigger_name = State()
-    waiting_for_emoji = State()
+    # FSM Handlers for Admin Panel
+    async def handle_trigger_creation(self, message: Message, state):
+        """Обробляє створення тригера через панель"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            await state.clear()
+            return
+        
+        trigger_name = message.text.strip().lower()
+        
+        # Validation
+        if not trigger_name or len(trigger_name) > 20:
+            await message.answer(
+                "❌ Назва тригера повинна бути від 1 до 20 символів",
+                parse_mode="HTML"
+            )
+            return
+        
+        if not trigger_name.replace("_", "").isalnum():
+            await message.answer(
+                "❌ Назва може містити тільки літери, цифри та підкреслення",
+                parse_mode="HTML"
+            )
+            return
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        # Check if trigger already exists
+        if self.chat_repo.get_trigger_users(chat_id, trigger_name) is not None:
+            await message.answer(
+                f"❌ Тригер <code>!{trigger_name}</code> вже існує",
+                parse_mode="HTML"
+            )
+            await state.clear()
+            return
+        
+        # Create trigger
+        if self.chat_repo.create_call_trigger(chat_id, trigger_name):
+            await message.answer(
+                f"✅ Тригер <code>!{trigger_name}</code> створено!\n\n"
+                f"Встановити емодзі: <code>!set_role_emoji {trigger_name} 🎯</code>\n"
+                f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь)\n"
+                f"Викликати: <code>!{trigger_name}</code>",
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                "❌ Помилка при створенні тригера",
+                parse_mode="HTML"
+            )
+        
+        await state.clear()
+        
+        # Show updated admin panel
+        await self._show_admin_panel(message.chat.id, chat_id)
+        try: await message.delete()
+        except: pass
 
-# FSM Handlers for Admin Panel
-async def handle_trigger_creation(self, message: Message, state):
-    """Обробляє створення тригера через панель"""
-    if not await self._is_admin(message.chat.id, message.from_user.id):
+    async def handle_emoji_input(self, message: Message, state):
+        """Обробляє встановлення емодзі для тригера"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            await state.clear()
+            return
+        
+        # Get trigger name from state
+        data = await state.get_data()
+        trigger_name = data.get("trigger_name")
+        
+        if not trigger_name:
+            await message.answer("❌ Помилка: тригер не вибрано")
+            await state.clear()
+            return
+        
+        # Extract emoji
+        custom_id = extract_custom_emoji_id(message)
+        emoji = f"tg-emoji:{custom_id}" if custom_id else message.text.strip()
+        
+        if not emoji:
+            await message.answer(
+                "❌ Відправте емодзі або відповідайте на повідомлення з емодзі",
+                parse_mode="HTML"
+            )
+            return
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        
+        # Set emoji
+        if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
+            await message.answer(
+                f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}",
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer("❌ Помилка встановлення емодзі")
+        
         await state.clear()
-        return
-    
-    trigger_name = message.text.strip().lower()
-    
-    # Validation
-    if not trigger_name or len(trigger_name) > 20:
-        await message.answer(
-            "❌ Назва тригера повинна бути від 1 до 20 символів",
-            parse_mode="HTML"
-        )
-        return
-    
-    if not trigger_name.replace("_", "").isalnum():
-        await message.answer(
-            "❌ Назва може містити тільки літери, цифри та підкреслення",
-            parse_mode="HTML"
-        )
-        return
-    
-    chat_id = get_clean_chat_id(message.chat.id)
-    
-    # Check if trigger already exists
-    if self.chat_repo.get_trigger_users(chat_id, trigger_name) is not None:
-        await message.answer(
-            f"❌ Тригер <code>!{trigger_name}</code> вже існує",
-            parse_mode="HTML"
-        )
-        await state.clear()
-        return
-    
-    # Create trigger
-    if self.chat_repo.create_call_trigger(chat_id, trigger_name):
-        await message.answer(
-            f"✅ Тригер <code>!{trigger_name}</code> створено!\n\n"
-            f"Встановити емодзі: <code>!set_role_emoji {trigger_name} 🎯</code>\n"
-            f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь)\n"
-            f"Викликати: <code>!{trigger_name}</code>",
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer(
-            "❌ Помилка при створенні тригера",
-            parse_mode="HTML"
-        )
-    
-    await state.clear()
-    
-    # Show updated admin panel
-    await self._show_admin_panel(message.chat.id, chat_id)
-    try: await message.delete()
-    except: pass
-
-async def handle_emoji_input(self, message: Message, state):
-    """Обробляє встановлення емодзі для тригера"""
-    if not await self._is_admin(message.chat.id, message.from_user.id):
-        await state.clear()
-        return
-    
-    # Get trigger name from state
-    data = await state.get_data()
-    trigger_name = data.get("trigger_name")
-    
-    if not trigger_name:
-        await message.answer("❌ Помилка: тригер не вибрано")
-        await state.clear()
-        return
-    
-    # Extract emoji
-    custom_id = extract_custom_emoji_id(message)
-    emoji = f"tg-emoji:{custom_id}" if custom_id else message.text.strip()
-    
-    if not emoji:
-        await message.answer(
-            "❌ Відправте емодзі або відповідайте на повідомлення з емодзі",
-            parse_mode="HTML"
-        )
-        return
-    
-    chat_id = get_clean_chat_id(message.chat.id)
-    
-    # Set emoji
-    if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
-        await message.answer(
-            f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}",
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer("❌ Помилка встановлення емодзі")
-    
-    await state.clear()
-    
-    # Show updated admin panel
-    await self._show_admin_panel(message.chat.id, chat_id)
-    try: await message.delete()
-    except: pass
+        
+        # Show updated admin panel
+        await self._show_admin_panel(message.chat.id, chat_id)
+        try: await message.delete()
+        except: pass
 
 # === Custom Triggers Logic ===
 
