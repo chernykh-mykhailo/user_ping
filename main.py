@@ -129,9 +129,10 @@ class PingBot:
 
         @self.dp.my_chat_member(
             F.new_chat_member.status.in_(["member", "administrator"])
+            & F.old_chat_member.status.in_(["left", "kicked"])
         )
         async def bot_added_to_chat(event: ChatMemberUpdated):
-            """Відправляє welcome message коли бота додають в групу"""
+            """Відправляє welcome message коли бота вперше додають в групу"""
             if event.chat.type in ["group", "supergroup"]:
                 await self.bot.send_message(
                     event.chat.id,

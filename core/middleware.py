@@ -61,6 +61,15 @@ class ActivityMiddleware(BaseMiddleware):
                                 f"Service Join: Користувач {member.id} доданий через сервісне повідомлення"
                             )
 
+                # Backup: видаляємо з бази, якщо хтось вийшов (сервісне повідомлення)
+                # Telegram надсилає left_chat_member навіть якщо бот не адмін
+                if event.left_chat_member and not event.left_chat_member.is_bot:
+                    left_user_id = str(event.left_chat_member.id)
+                    self.chat_repo.remove_user(chat_id, left_user_id)
+                    self.logger.info(
+                        f"Service Leave: Користувач {left_user_id} вийшов (сервісне повідомлення)"
+                    )
+
                 # Визначаємо чи це команда (щоб не знімати анрег помилково)
                 word_commands = [
                     "анрег",
