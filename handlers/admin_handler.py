@@ -378,9 +378,9 @@ class AdminHandler(BaseHandler):
                 "ping_delay", PING_LIMITS["default_delay"]
             )
             use_ub = self.chat_repo.get_global_setting("use_userbot", True)
-            quote_mode = self.chat_repo.get_global_setting(
-                "unreg_quote_mode", "premium"
-            )
+            quote_mode = self.chat_repo.get_global_setting("unreg_quote_mode")
+            if quote_mode is None:
+                quote_mode = "all (за замовчуванням)"
 
             text = (
                 "🖥 <b>ГЛОБАЛЬНА ПАНЕЛЬ КЕРУВАННЯ</b>\n"

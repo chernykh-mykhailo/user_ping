@@ -694,9 +694,11 @@ class UserHandler(BaseHandler):
 
         # Logic for quote permissions
         if quote:
-            quote_mode = self.chat_repo.get_global_setting(
-                "unreg_quote_mode", "all"
-            )  # 'all' or 'premium'
+            quote_mode = self.chat_repo.get_global_setting("unreg_quote_mode")
+            # Якщо налаштування не встановлено - дозволяємо всім
+            if quote_mode is None:
+                quote_mode = "all"
+            
             has_premium = self.premium_repo.has_premium(user_id)
 
             # Якщо режим "premium" і у юзера немає преміум

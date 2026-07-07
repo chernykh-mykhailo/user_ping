@@ -38,6 +38,13 @@ class PingHandler(BaseHandler):
         self._active_pings = set()
         self.userbot = userbot
         self.use_userbot = use_userbot
+        
+        # v2.11.0: Flood protection and request queue for roles panel
+        self._panel_locks = {}  # chat_id: asyncio.Lock()
+        self._panel_queues = {}  # chat_id: asyncio.Queue()
+        self._panel_processing = {}  # chat_id: bool
+        self._last_panel_action = {}  # user_id: timestamp
+        
         super().__init__(chat_repo, premium_repo)
 
     def register_handlers(self):
@@ -1647,36 +1654,48 @@ class PingHandler(BaseHandler):
         await self._send_pings(message.chat.id, trigger_users, f"🎯 Тригер: {trigger_name}", use_emoji=True, show_names=True)
 
     async def cmd_roles_panel(self, message: Message):
-        """Створює панель самореєстрації"""
-        if not await self._is_admin(message.chat.id, message.from_user.id): return
+        """Створює панель самореєстрації з покращеним UI"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+        
         chat_id = get_clean_chat_id(message.chat.id)
         triggers = self.chat_repo.get_call_triggers(chat_id)
+        
         if not triggers:
-            await message.answer("❌ Немає тригерів. Створіть через !addcall", parse_mode="HTML")
+            await message.answer(
+                "❌ <b>Немає тригерів для панелі</b>\n\n"
+                "Створіть тригери командою:\n"
+                "<code>!addcall назва</code>",
+                parse_mode="HTML"
+            )
             return
 
-        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
-        buttons = []
-        row = []
-        for t in sorted(triggers.keys()):
-            emoji = emojis.get(t, "🎯")
-            row.append(InlineKeyboardButton(text=f"{render_emoji(emoji)} {t.capitalize()}", callback_data=f"role_{t}"))
-            if len(row) == 2:
-                buttons.append(row)
-                row = []
-        if row: buttons.append(row)
+        # v2.11.0: Initialize lock and queue for this chat
+        if chat_id not in self._panel_locks:
+            self._panel_locks[chat_id] = asyncio.Lock()
+            self._panel_queues[chat_id] = asyncio.Queue()
+            self._panel_processing[chat_id] = False
 
+        await self._send_roles_panel(message.chat.id, chat_id)
+        
         try: await message.delete()
         except: pass
-        await self.bot.send_message(message.chat.id, "🎮 <b>Панель реєстрації</b>\n\nОберіть ролі щоб отримувати сповіщення:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
     async def cmd_set_role_emoji(self, message: Message):
         """Встановлює емодзі для ролі"""
-        if not await self._is_admin(message.chat.id, message.from_user.id): return
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+        
         import re
         match = re.search(r"^!set_role_emoji\s+(\S+)", message.text)
         if not match:
-            await message.answer("❌ Формат: !set_role_emoji назва 🎯")
+            await message.answer(
+                "❌ <b>Формат:</b> <code>!set_role_emoji назва 🎯</code>\n\n"
+                "Можна використовувати:\n"
+                "• Звичайні емодзі: 🎯\n"
+                "• Кастомні: відповісти на повідомлення з емодзі",
+                parse_mode="HTML"
+            )
             return
         
         trigger_name = match.group(1)
@@ -1685,45 +1704,70 @@ class PingHandler(BaseHandler):
         
         chat_id = get_clean_chat_id(message.chat.id)
         if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
-            await message.answer(f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}", parse_mode="HTML")
+            await message.answer(
+                f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}",
+                parse_mode="HTML"
+            )
         else:
             await message.answer("❌ Помилка встановлення")
 
     async def callback_role_toggle(self, callback: CallbackQuery):
-        """Тобл реєстрації користувача"""
+        """Тобл реєстрації користувача з flood protection"""
         trigger = callback.data.replace("role_", "")
         uid = str(callback.from_user.id)
         cid = get_clean_chat_id(callback.message.chat.id)
-        users = self.chat_repo.get_trigger_users(cid, trigger)
         
-        if uid in users:
-            self.chat_repo.remove_user_from_trigger(cid, trigger, uid)
-            await callback.answer(f"❌ Ви вийшли з !{trigger}")
-        else:
-            self.chat_repo.add_user_to_trigger(cid, trigger, uid)
-            await callback.answer(f"✅ Ви підписались на !{trigger}")
+        # v2.11.0: Flood wait protection (3 seconds between actions per user)
+        import time
+        current_time = time.time()
+        last_action = self._last_panel_action.get(uid, 0)
         
-        await self._update_roles_panel(callback.message, cid, uid)
+        if current_time - last_action < 3:
+            wait_time = int(3 - (current_time - last_action))
+            await callback.answer(
+                f"⏳ Зачекайте {wait_time}с перед наступною дією",
+                show_alert=True
+            )
+            return
+        
+        self._last_panel_action[uid] = current_time
+        
+        # v2.11.0: Add to queue for processing
+        if cid not in self._panel_queues:
+            self._panel_queues[cid] = asyncio.Queue()
+            self._panel_locks[cid] = asyncio.Lock()
+            self._panel_processing[cid] = False
+        
+        await self._panel_queues[cid].put({
+            'type': 'toggle',
+            'callback': callback,
+            'trigger': trigger,
+            'uid': uid
+        })
+        
+        # Start processor if not running
+        if not self._panel_processing[cid]:
+            asyncio.create_task(self._process_panel_queue(cid))
+        
+        await callback.answer("⏳ Обробка...")
 
-    async def _update_roles_panel(self, message: Message, chat_id: str, user_id: str):
-        """Оновлює повідомлення панелі ролей з урахуванням вибору користувача"""
-        triggers = self.chat_repo.get_call_triggers(chat_id)
+    async def _send_roles_panel(self, chat_id: int, chat_id_str: str):
+        """Відправляє панель реєстрації з кількістю зареєстрованих"""
+        triggers = self.chat_repo.get_call_triggers(chat_id_str)
         if not triggers:
             return
 
-        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
-        user_roles = []
-        for t in triggers.keys():
-            uids = self.chat_repo.get_trigger_users(chat_id, t)
-            if str(user_id) in uids:
-                user_roles.append(t)
-
+        emojis = self.chat_repo.get_all_trigger_emojis(chat_id_str)
         buttons = []
         row = []
+        
         for t in sorted(triggers.keys()):
             emoji = emojis.get(t, "🎯")
-            is_reg = t in user_roles
-            label = f"{'✅ ' if is_reg else ''}{render_emoji(emoji)} {t.capitalize()}"
+            # v2.11.0: Show registered count instead of checkmark
+            registered_count = len(self.chat_repo.get_trigger_users(chat_id_str, t))
+            count_display = f" [{registered_count}]" if registered_count > 0 else ""
+            label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
+            
             row.append(
                 InlineKeyboardButton(text=label, callback_data=f"role_{t}")
             )
@@ -1737,8 +1781,49 @@ class PingHandler(BaseHandler):
 
         panel_text = (
             "🎮 <b>Панель реєстрації</b>\n\n"
-            "Оберіть ігри/події, на які хочете отримувати сповіщення:\n\n"
-            "<i>Натисніть кнопку щоб зареєструватись або вийти</i>"
+            "Оберіть ролі для отримання сповіщень:\n\n"
+            "<i>Цифра [] = кількість зареєстрованих</i>"
+        )
+
+        try:
+            await self.bot.send_message(
+                chat_id, panel_text, reply_markup=keyboard, parse_mode="HTML"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to send roles panel: {e}")
+
+    async def _update_roles_panel(self, message: Message, chat_id: str, user_id: str):
+        """Оновлює повідомлення панелі ролей з кількістю зареєстрованих"""
+        triggers = self.chat_repo.get_call_triggers(chat_id)
+        if not triggers:
+            return
+
+        emojis = self.chat_repo.get_all_trigger_emojis(chat_id)
+        buttons = []
+        row = []
+        
+        for t in sorted(triggers.keys()):
+            emoji = emojis.get(t, "🎯")
+            # v2.11.0: Show registered count
+            registered_count = len(self.chat_repo.get_trigger_users(chat_id, t))
+            count_display = f" [{registered_count}]" if registered_count > 0 else ""
+            label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
+            
+            row.append(
+                InlineKeyboardButton(text=label, callback_data=f"role_{t}")
+            )
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+        panel_text = (
+            "🎮 <b>Панель реєстрації</b>\n\n"
+            "Оберіть ролі для отримання сповіщень:\n\n"
+            "<i>Цифра [] = кількість зареєстрованих</i>"
         )
 
         try:
@@ -1747,6 +1832,47 @@ class PingHandler(BaseHandler):
             )
         except Exception:
             pass
+
+    async def _process_panel_queue(self, chat_id: str):
+        """Обробляє чергу запитів панелі (запобігає флуду)"""
+        self._panel_processing[chat_id] = True
+        
+        try:
+            while not self._panel_queues[chat_id].empty():
+                request = await self._panel_queues[chat_id].get()
+                
+                if request['type'] == 'toggle':
+                    trigger = request['trigger']
+                    uid = request['uid']
+                    callback = request['callback']
+                    
+                    # Acquire lock for this chat
+                    async with self._panel_locks.get(chat_id, asyncio.Lock()):
+                        users = self.chat_repo.get_trigger_users(chat_id, trigger)
+                        
+                        if uid in users:
+                            self.chat_repo.remove_user_from_trigger(chat_id, trigger, uid)
+                            action_text = f"❌ Ви вийшли з !{trigger}"
+                        else:
+                            self.chat_repo.add_user_to_trigger(chat_id, trigger, uid)
+                            action_text = f"✅ Ви підписались на !{trigger}"
+                        
+                        # Update panel
+                        await self._update_roles_panel(callback.message, chat_id, uid)
+                        
+                        # Show confirmation
+                        try:
+                            await callback.answer(action_text, show_alert=False)
+                        except Exception:
+                            pass
+                
+                # Small delay between queue items
+                await asyncio.sleep(0.5)
+                
+        except Exception as e:
+            self.logger.error(f"Error processing panel queue: {e}")
+        finally:
+            self._panel_processing[chat_id] = False
 
     async def callback_stop_ping(self, callback: CallbackQuery):
         """Обробляє натискання кнопки стоп"""
