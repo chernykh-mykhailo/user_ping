@@ -1964,7 +1964,7 @@ class PingHandler(BaseHandler):
         if triggers:
             keyboard.append([
                 InlineKeyboardButton(
-                    text="📋 <b>Список тригерів:</b>",
+                    text="📋 Список тригерів:",
                     callback_data="admin_none"
                 )
             ])
