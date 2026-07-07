@@ -2127,7 +2127,7 @@ class PingHandler(BaseHandler):
             all_users = chat_data.get("users", {})
             
             user_list = "\n".join([
-                f"• {all_users.get(uid, f'User {uid}')}"
+                f"• {all_users.get(uid, {}).get('name', f'User {uid}') if isinstance(all_users.get(uid), dict) else all_users.get(uid, f'User {uid}')}"
                 for uid in user_ids[:20]
             ])
             
