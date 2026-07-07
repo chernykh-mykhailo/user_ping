@@ -38,13 +38,14 @@ class PingHandler(BaseHandler):
     """
 
     def __init__(
-        self, chat_repo, premium_repo, bot: Bot, userbot=None, use_userbot=False
+        self, chat_repo, premium_repo, bot: Bot, userbot=None, use_userbot=False, storage=None
     ):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
         self._active_pings = set()
         self.userbot = userbot
         self.use_userbot = use_userbot
+        self._storage = storage
         
         # v2.11.0: Flood protection and request queue for roles panel
         self._panel_locks = {}  # chat_id: asyncio.Lock()
@@ -2025,15 +2026,10 @@ class PingHandler(BaseHandler):
         
         elif data == "admin_help":
             help_text = (
-                "ℹ️ <b>Довідка</b>\n\n"
-                "<b>Створення:</b>\n"
-                "Натисніть ➕ і введіть назву тригера\n\n"
-                "<b>Редагування:</b>\n"
-                "Натисніть на тригер для зміни емодзі\n\n"
-                "<b>Видалення:</b>\n"
-                "Натисніть 🗑 поруч з тригером\n\n"
-                "<b>Додати користувача:</b>\n"
-                "Відповідайте на повідомлення: !adduser назва"
+                "➕ Створити ➔ ввести назву\n"
+                "✏️ Змінити ➔ натиснути на тригер\n"
+                "🗑 Видалити ➔ натиснути 🗑\n"
+                "👥 Додати юзера ➔ !adduser назва (reply)"
             )
             await callback.answer(help_text, show_alert=True)
             return
@@ -2041,8 +2037,9 @@ class PingHandler(BaseHandler):
         elif data == "admin_create":
             # Set state for creating trigger
             from aiogram.fsm.context import FSMContext
+            storage = self._storage or callback.bot.storage
             state = FSMContext(
-                storage=callback.bot.redis_storage,
+                storage=storage,
                 key=f"admin_create_{callback.from_user.id}"
             )
             await state.set_state(AdminStates.waiting_for_trigger_name)
@@ -2101,8 +2098,9 @@ class PingHandler(BaseHandler):
         elif data.startswith("admin_setemoji_"):
             trigger_name = data.replace("admin_setemoji_", "")
             from aiogram.fsm.context import FSMContext
+            storage = self._storage or callback.bot.storage
             state = FSMContext(
-                storage=callback.bot.redis_storage,
+                storage=storage,
                 key=f"admin_setemoji_{callback.from_user.id}"
             )
             await state.set_state(AdminStates.waiting_for_emoji)
