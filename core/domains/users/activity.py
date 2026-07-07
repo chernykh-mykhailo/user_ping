@@ -104,26 +104,13 @@ class UserActivityDomain:
 
     def remove_user(self, chat_id: str, user_id: str) -> None:
         """Removes user from chat (e.g., left or kicked)"""
-        import logging
-        _log = logging.getLogger(__name__)
-
         user_id = str(user_id)
         data = self.storage.load()
-
-        _log.info(f"🔍 remove_user: storage_id={id(self.storage)}, cache_id={id(data)}, user={user_id}")
 
         if chat_id in data and "users" in data[chat_id]:
             if user_id in data[chat_id]["users"]:
                 del data[chat_id]["users"][user_id]
                 self.storage.save(data)
-                # Перевірка після збереження
-                after = self.storage.load()
-                still_there = user_id in after.get(chat_id, {}).get("users", {})
-                _log.info(f"🔍 after remove: cache_id={id(after)}, still_in_cache={still_there}, users={list(after.get(chat_id, {}).get('users', {}).keys())}")
-            else:
-                _log.info(f"🔍 remove_user: user {user_id} NOT FOUND in users dict")
-        else:
-            _log.info(f"🔍 remove_user: chat {chat_id} not in data or no 'users' key")
 
     def get_all_user_ids(self, chat_id: str) -> List[str]:
         """Returns all user IDs for a given chat (v2.6.5)"""

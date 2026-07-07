@@ -171,16 +171,6 @@ class UserHandler(BaseHandler):
         """Видаляє користувача з бази, коли він виходить з чату"""
         chat_id = get_clean_chat_id(event.chat.id)
         user_id = str(event.old_chat_member.user.id)
-        user_name = event.old_chat_member.user.first_name
-
-        # Перевіряємо чи юзер є в базі перед видаленням
-        all_ids = self.chat_repo.get_all_user_ids(chat_id)
-        in_db = user_id in all_ids
-
-        self.logger.info(
-            f"🚪 chat_member LEFT event: user={user_id} ({user_name}), "
-            f"chat={chat_id}, in_db={in_db}, total_before={len(all_ids)}"
-        )
 
         self.chat_repo.remove_user(chat_id, user_id)
         self.logger.info(f"Real-time Cleanup: Користувач {user_id} вийшов з {chat_id}")

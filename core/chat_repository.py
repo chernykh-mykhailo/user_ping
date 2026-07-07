@@ -121,9 +121,6 @@ class ChatRepository:
 
     def get_stats(self, chat_id: str) -> Dict[str, int]:
         """Returns chat statistics"""
-        import logging
-        _log = logging.getLogger(__name__)
-
         chat_data = self.activity._get_chat_data(chat_id)
 
         total = len(chat_data.get("users", {}))
@@ -131,8 +128,6 @@ class ChatRepository:
         super_unreg = len(chat_data.get("super_unreg", []))
         super_puper = len(chat_data.get("super_puper_unreg", []))
         active = total - temp_unreg - super_unreg - super_puper
-
-        _log.info(f"📊 get_stats [{chat_id}]: storage_id={id(self.activity.storage)}, total={total}, users={list(chat_data.get('users', {}).keys())}")
 
         return {
             "total": total,
