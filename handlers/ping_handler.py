@@ -2151,7 +2151,6 @@ class AdminStates(StatesGroup):
     waiting_for_emoji = State()
 
 # FSM Handlers for Admin Panel
-@router.message(AdminStates.waiting_for_trigger_name)
 async def handle_trigger_creation(self, message: Message, state):
     """Обробляє створення тригера через панель"""
     if not await self._is_admin(message.chat.id, message.from_user.id):
@@ -2208,7 +2207,6 @@ async def handle_trigger_creation(self, message: Message, state):
     try: await message.delete()
     except: pass
 
-@router.message(AdminStates.waiting_for_emoji)
 async def handle_emoji_input(self, message: Message, state):
     """Обробляє встановлення емодзі для тригера"""
     if not await self._is_admin(message.chat.id, message.from_user.id):
