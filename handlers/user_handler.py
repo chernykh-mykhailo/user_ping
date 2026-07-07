@@ -503,7 +503,7 @@ class UserHandler(BaseHandler):
                     "   <code>!addcall croco 🐊</code>\n"
                     "   <code>!addcall mafia 🔫</code>\n\n"
                     "2. Створіть панель:\n"
-                    "   <code>!roles_panel</code>\n\n"
+                    "   <code>!pings</code>\n\n"
                     "<b>Використання:</b>\n"
                     "Користувачі натискають кнопки для реєстрації:\n"
                     "• ✅ — Зареєстрований\n"

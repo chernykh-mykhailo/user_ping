@@ -145,8 +145,8 @@ class PingHandler(BaseHandler):
         self.router.message(F.text == "!triggers")(self.cmd_list_custom_triggers)
 
         # 2. Specific System Commands
-        self.router.message(Command("roles_panel"))(self.cmd_roles_panel)
-        self.router.message(F.text.regexp(re.compile(r"^!roles_panel$", re.I)))(
+        self.router.message(Command("pings"))(self.cmd_roles_panel)
+        self.router.message(F.text.regexp(re.compile(r"^!pings$", re.I)))(
             self.cmd_roles_panel
         )
         self.router.message(F.text.regexp(re.compile(r"^!set_role_emoji\s+(\S+)\s+(.+)", re.I)))(
@@ -158,8 +158,8 @@ class PingHandler(BaseHandler):
         self.router.callback_query(F.data == "stop_ping")(self.callback_stop_ping)
         
         # Admin Panel for Triggers (v2.11.0)
-        self.router.message(Command("admin_panel"))(self.cmd_admin_panel)
-        self.router.message(F.text.regexp(re.compile(r"^!admin_panel$", re.I)))(
+        self.router.message(Command("pings_panel"))(self.cmd_admin_panel)
+        self.router.message(F.text.regexp(re.compile(r"^!pings_panel$", re.I)))(
             self.cmd_admin_panel
         )
         self.router.callback_query(F.data.startswith("admin_"))(
@@ -1518,7 +1518,7 @@ class PingHandler(BaseHandler):
                     f"✅ Тригер <code>!{trigger_name}</code> створено з емодзі {display_emoji}!\n\n"
                     f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь на повідомлення)\n"
                     f"Викликати: <code>!{trigger_name}</code>\n"
-                    f"Панель реєстрації: <code>!roles_panel</code>",
+                    f"Панель реєстрації: <code>!pings</code>",
                     parse_mode="HTML",
                 )
             else:
@@ -2043,9 +2043,13 @@ class PingHandler(BaseHandler):
                 key=f"admin_create_{callback.from_user.id}"
             )
             await state.set_state(AdminStates.waiting_for_trigger_name)
+            keyboard = [[
+                InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")
+            ]]
             await callback.message.edit_text(
                 "➕ <b>Створення тригера</b>\n\n"
                 "Введіть назву тригера (наприклад: <code>game</code>):",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 parse_mode="HTML"
             )
             return
@@ -2105,9 +2109,13 @@ class PingHandler(BaseHandler):
             )
             await state.set_state(AdminStates.waiting_for_emoji)
             await state.update_data(trigger_name=trigger_name)
+            keyboard = [[
+                InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin_edit_{trigger_name}")
+            ]]
             await callback.message.edit_text(
                 f"🎯 <b>Зміна емодзі для !{trigger_name}</b>\n\n"
                 "Відправте новий емодзі або відповідайте на повідомлення з емодзі:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 parse_mode="HTML"
             )
             return
