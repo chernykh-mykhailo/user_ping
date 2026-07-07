@@ -69,6 +69,9 @@ class ActivityMiddleware(BaseMiddleware):
                     self.logger.info(
                         f"Service Leave: Користувач {left_user_id} вийшов (сервісне повідомлення)"
                     )
+                    # ВАЖЛИВО: одразу виходимо, щоб не save_user-нути юзера назад
+                    # (from_user == left_chat_member для добровільного виходу)
+                    return await handler(event, data)
 
                 # Визначаємо чи це команда (щоб не знімати анрег помилково)
                 word_commands = [
