@@ -15,6 +15,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     CallbackQuery,
 )
+from aiogram.fsm.state import State, StatesGroup
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id, render_emoji, extract_custom_emoji_id
 
