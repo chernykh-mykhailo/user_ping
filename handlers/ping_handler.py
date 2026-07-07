@@ -148,6 +148,24 @@ class PingHandler(BaseHandler):
             self.callback_role_toggle
         )
         self.router.callback_query(F.data == "stop_ping")(self.callback_stop_ping)
+        
+        # Admin Panel for Triggers (v2.11.0)
+        self.router.message(Command("admin_panel"))(self.cmd_admin_panel)
+        self.router.message(F.text.regexp(re.compile(r"^!admin_panel$", re.I)))(
+            self.cmd_admin_panel
+        )
+        self.router.callback_query(F.data.startswith("admin_"))(
+            self.callback_admin_panel
+        )
+        
+        # FSM handlers for admin panel
+        from aiogram.fsm.state import State
+        self.router.message(AdminStates.waiting_for_trigger_name)(
+            self.handle_trigger_creation
+        )
+        self.router.message(AdminStates.waiting_for_emoji)(
+            self.handle_emoji_input
+        )
 
         # 3. Dynamic Triggers (Regex !word)
         self.router.message(Command("allow_unreg"))(self.cmd_allow_unreg)
@@ -1909,7 +1927,332 @@ class PingHandler(BaseHandler):
         except Exception:
             pass
 
-    # === Custom Triggers Logic ===
+    async def cmd_admin_panel(self, message: Message):
+        """Відкриває адмін панель для керування тригерами"""
+        if not await self._is_admin(message.chat.id, message.from_user.id):
+            return
+        
+        chat_id = get_clean_chat_id(message.chat.id)
+        await self._show_admin_panel(message.chat.id, chat_id)
+        
+        try: await message.delete()
+        except: pass
+
+    async def _show_admin_panel(self, chat_id: int, chat_id_str: str):
+        """Показує адмін панель для керування тригерами"""
+        triggers = self.chat_repo.get_call_triggers(chat_id_str)
+        emojis = self.chat_repo.get_all_trigger_emojis(chat_id_str)
+        
+        keyboard = []
+        
+        # Header buttons
+        keyboard.append([
+            InlineKeyboardButton(
+                text="➕ Створити тригер",
+                callback_data="admin_create"
+            )
+        ])
+        
+        # List of existing triggers with manage buttons
+        if triggers:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="📋 <b>Список тригерів:</b>",
+                    callback_data="admin_none"
+                )
+            ])
+            
+            for t in sorted(triggers.keys()):
+                emoji = emojis.get(t, "🎯")
+                user_count = len(self.chat_repo.get_trigger_users(chat_id_str, t))
+                
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=f"{render_emoji(emoji)} !{t} ({user_count})",
+                        callback_data=f"admin_edit_{t}"
+                    ),
+                    InlineKeyboardButton(
+                        text="🗑",
+                        callback_data=f"admin_delete_{t}"
+                    )
+                ])
+        
+        # Help button
+        keyboard.append([
+            InlineKeyboardButton(
+                text="ℹ️ Довідка",
+                callback_data="admin_help"
+            )
+        ])
+        
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        
+        panel_text = (
+            "🛠 <b>Адмін Панель Тригерів</b>\n\n"
+            "Керуйте тригерами через інтерфейс:\n\n"
+            "• ➕ Створити новий тригер\n"
+            "• 📋 Переглянути/редагувати існуючі\n"
+            "• 🗑 Видалити тригер\n\n"
+            "<i>Всі дії зберігаються автоматично</i>"
+        )
+        
+        try:
+            await self.bot.send_message(
+                chat_id, panel_text, reply_markup=markup, parse_mode="HTML"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to send admin panel: {e}")
+
+    async def callback_admin_panel(self, callback: CallbackQuery):
+        """Обробляє натискання в адмін панелі"""
+        if not await self._is_admin(callback.message.chat.id, callback.from_user.id):
+            await callback.answer("❌ Недостатньо прав", show_alert=True)
+            return
+        
+        data = callback.data
+        chat_id = get_clean_chat_id(callback.message.chat.id)
+        
+        if data == "admin_none":
+            await callback.answer()
+            return
+        
+        elif data == "admin_help":
+            help_text = (
+                "ℹ️ <b>Довідка</b>\n\n"
+                "<b>Створення:</b>\n"
+                "Натисніть ➕ і введіть назву тригера\n\n"
+                "<b>Редагування:</b>\n"
+                "Натисніть на тригер для зміни емодзі\n\n"
+                "<b>Видалення:</b>\n"
+                "Натисніть 🗑 поруч з тригером\n\n"
+                "<b>Додати користувача:</b>\n"
+                "Відповідайте на повідомлення: !adduser назва"
+            )
+            await callback.answer(help_text, show_alert=True)
+            return
+        
+        elif data == "admin_create":
+            # Set state for creating trigger
+            from aiogram.fsm.context import FSMContext
+            state = FSMContext(
+                storage=callback.bot.redis_storage,
+                key=f"admin_create_{callback.from_user.id}"
+            )
+            await state.set_state(AdminStates.waiting_for_trigger_name)
+            await callback.message.edit_text(
+                "➕ <b>Створення тригера</b>\n\n"
+                "Введіть назву тригера (наприклад: <code>game</code>):",
+                parse_mode="HTML"
+            )
+            return
+        
+        elif data.startswith("admin_delete_"):
+            trigger_name = data.replace("admin_delete_", "")
+            if self.chat_repo.delete_call_trigger(chat_id, trigger_name):
+                await callback.answer(f"✅ Тригер !{trigger_name} видалено")
+                await self._show_admin_panel(callback.message.chat.id, chat_id)
+                await callback.message.delete()
+            else:
+                await callback.answer("❌ Помилка видалення", show_alert=True)
+            return
+        
+        elif data.startswith("admin_edit_"):
+            trigger_name = data.replace("admin_edit_", "")
+            emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or "🎯"
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        text="🎯 Змінити емодзі",
+                        callback_data=f"admin_setemoji_{trigger_name}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="👥 Переглянути учасників",
+                        callback_data=f"admin_viewusers_{trigger_name}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="◀️ Назад",
+                        callback_data="admin_back"
+                    )
+                ]
+            ]
+            
+            markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+            await callback.message.edit_text(
+                f"✏️ <b>Редагування: !{trigger_name}</b>\n\n"
+                f"Поточний емодзі: {render_emoji(emoji)}\n"
+                f"Учасників: {len(self.chat_repo.get_trigger_users(chat_id, trigger_name))}",
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+            return
+        
+        elif data.startswith("admin_setemoji_"):
+            trigger_name = data.replace("admin_setemoji_", "")
+            from aiogram.fsm.context import FSMContext
+            state = FSMContext(
+                storage=callback.bot.redis_storage,
+                key=f"admin_setemoji_{callback.from_user.id}"
+            )
+            await state.set_state(AdminStates.waiting_for_emoji)
+            await state.update_data(trigger_name=trigger_name)
+            await callback.message.edit_text(
+                f"🎯 <b>Зміна емодзі для !{trigger_name}</b>\n\n"
+                "Відправте новий емодзі або відповідайте на повідомлення з емодзі:",
+                parse_mode="HTML"
+            )
+            return
+        
+        elif data.startswith("admin_viewusers_"):
+            trigger_name = data.replace("admin_viewusers_", "")
+            user_ids = self.chat_repo.get_trigger_users(chat_id, trigger_name)
+            chat_data = self.chat_repo.get_chat_data(chat_id)
+            all_users = chat_data.get("users", {})
+            
+            user_list = "\n".join([
+                f"• {all_users.get(uid, f'User {uid}')}"
+                for uid in user_ids[:20]
+            ])
+            
+            if len(user_ids) > 20:
+                user_list += f"\n... та ще {len(user_ids) - 20}"
+            
+            text = (
+                f"👥 <b>Учасники !{trigger_name}:</b>\n\n"
+                f"{user_list if user_list else 'Немає учасників'}"
+            )
+            
+            keyboard = [[
+                InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin_edit_{trigger_name}")
+            ]]
+            
+            await callback.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="HTML"
+            )
+            return
+        
+        elif data == "admin_back":
+            await self._show_admin_panel(callback.message.chat.id, chat_id)
+            await callback.message.delete()
+            return
+        
+        await callback.answer()
+
+# FSM States for Admin Panel
+class AdminStates(StatesGroup):
+    waiting_for_trigger_name = State()
+    waiting_for_emoji = State()
+
+# FSM Handlers for Admin Panel
+@router.message(AdminStates.waiting_for_trigger_name)
+async def handle_trigger_creation(self, message: Message, state):
+    """Обробляє створення тригера через панель"""
+    if not await self._is_admin(message.chat.id, message.from_user.id):
+        await state.clear()
+        return
+    
+    trigger_name = message.text.strip().lower()
+    
+    # Validation
+    if not trigger_name or len(trigger_name) > 20:
+        await message.answer(
+            "❌ Назва тригера повинна бути від 1 до 20 символів",
+            parse_mode="HTML"
+        )
+        return
+    
+    if not trigger_name.replace("_", "").isalnum():
+        await message.answer(
+            "❌ Назва може містити тільки літери, цифри та підкреслення",
+            parse_mode="HTML"
+        )
+        return
+    
+    chat_id = get_clean_chat_id(message.chat.id)
+    
+    # Check if trigger already exists
+    if self.chat_repo.get_trigger_users(chat_id, trigger_name) is not None:
+        await message.answer(
+            f"❌ Тригер <code>!{trigger_name}</code> вже існує",
+            parse_mode="HTML"
+        )
+        await state.clear()
+        return
+    
+    # Create trigger
+    if self.chat_repo.create_call_trigger(chat_id, trigger_name):
+        await message.answer(
+            f"✅ Тригер <code>!{trigger_name}</code> створено!\n\n"
+            f"Встановити емодзі: <code>!set_role_emoji {trigger_name} 🎯</code>\n"
+            f"Додати користувача: <code>!adduser {trigger_name}</code> (у відповідь)\n"
+            f"Викликати: <code>!{trigger_name}</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "❌ Помилка при створенні тригера",
+            parse_mode="HTML"
+        )
+    
+    await state.clear()
+    
+    # Show updated admin panel
+    await self._show_admin_panel(message.chat.id, chat_id)
+    try: await message.delete()
+    except: pass
+
+@router.message(AdminStates.waiting_for_emoji)
+async def handle_emoji_input(self, message: Message, state):
+    """Обробляє встановлення емодзі для тригера"""
+    if not await self._is_admin(message.chat.id, message.from_user.id):
+        await state.clear()
+        return
+    
+    # Get trigger name from state
+    data = await state.get_data()
+    trigger_name = data.get("trigger_name")
+    
+    if not trigger_name:
+        await message.answer("❌ Помилка: тригер не вибрано")
+        await state.clear()
+        return
+    
+    # Extract emoji
+    custom_id = extract_custom_emoji_id(message)
+    emoji = f"tg-emoji:{custom_id}" if custom_id else message.text.strip()
+    
+    if not emoji:
+        await message.answer(
+            "❌ Відправте емодзі або відповідайте на повідомлення з емодзі",
+            parse_mode="HTML"
+        )
+        return
+    
+    chat_id = get_clean_chat_id(message.chat.id)
+    
+    # Set emoji
+    if self.chat_repo.set_trigger_emoji(chat_id, trigger_name, emoji):
+        await message.answer(
+            f"✅ Для <code>!{trigger_name}</code> встановлено {render_emoji(emoji)}",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("❌ Помилка встановлення емодзі")
+    
+    await state.clear()
+    
+    # Show updated admin panel
+    await self._show_admin_panel(message.chat.id, chat_id)
+    try: await message.delete()
+    except: pass
+
+# === Custom Triggers Logic ===
 
     async def cmd_add_custom_trigger(self, message: Message):
         """Додає кастомний текстовий тригер"""
