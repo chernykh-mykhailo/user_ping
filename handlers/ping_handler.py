@@ -1454,7 +1454,11 @@ class PingHandler(BaseHandler):
 
         user_list = ""
         for uid in user_ids:
-            name = all_users.get(uid, f"User {uid}")
+            raw = all_users.get(uid)
+            if isinstance(raw, dict):
+                name = raw.get("name", f"User {uid}")
+            else:
+                name = raw or f"User {uid}"
             # v2.10.26: Додаємо емодзі премів
             personal = self.chat_repo.get_user_setting(uid, "personal_emoji")
             emoji_prefix = ""

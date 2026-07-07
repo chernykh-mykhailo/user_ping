@@ -504,11 +504,12 @@ class UserHandler(BaseHandler):
                     "   <code>!addcall mafia 🔫</code>\n\n"
                     "2. Створіть панель:\n"
                     "   <code>!pings</code>\n\n"
+                    "<b>Адмін панель тригерів:</b>\n"
+                    "   <code>!pings_panel</code> — керування через кнопки\n\n"
                     "<b>Використання:</b>\n"
                     "Користувачі натискають кнопки для реєстрації:\n"
                     "• ✅ — Зареєстрований\n"
-                    "• Без ✅ — Не зареєстрований\n\n"
-                    "<i>Як в Discord! 🎯</i>"
+                    "• Без ✅ — Не зареєстрований"
                 )
                 await safe_edit_text(text, reply_markup=back_button)
 
