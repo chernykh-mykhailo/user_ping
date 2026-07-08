@@ -4,6 +4,7 @@ User handlers - команди користувача (SRP)
 
 import logging
 import asyncio
+import random
 from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import (
@@ -745,7 +746,17 @@ class UserHandler(BaseHandler):
                 emoji_html = render_emoji(user_emoji) if user_emoji else ""
                 emoji_prefix = f"{emoji_html} " if emoji_html else ""
 
-                text = f"🔕 {emoji_prefix}<b>{name}</b> анрегнувся зі словами:\n<i>{safe_quote}</i>"
+                # Випадковий преміум-емодзі колокольчика
+                bell_emojis = [
+                    "tg-emoji:5785363566672482185",
+                    "tg-emoji:5458603043203327669",
+                    "tg-emoji:5319290706601204434",
+                    "tg-emoji:5244807637157029775",
+                ]
+                random_bell = random.choice(bell_emojis)
+                bell_emoji_html = render_emoji(random_bell)
+                
+                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix} анрегнувся зі словами:\n<i>{safe_quote}</i>"
                 sent = await message.answer(text, parse_mode="HTML")
 
                 # Check chat setting for cleanup (default: False - keep quote)
@@ -775,7 +786,17 @@ class UserHandler(BaseHandler):
                     message.from_user.id,
                 )
 
-                text = f"🔕 {emoji_prefix}<b>{name}</b>: пінги вимкнено.\n<i>Напишіть будь-що в чат, щоб увімкнути назад.</i>"
+                # Випадковий преміум-емодзі колокольчика
+                bell_emojis = [
+                    "tg-emoji:5785363566672482185",
+                    "tg-emoji:5458603043203327669",
+                    "tg-emoji:5319290706601204434",
+                    "tg-emoji:5244807637157029775",
+                ]
+                random_bell = random.choice(bell_emojis)
+                bell_emoji_html = render_emoji(random_bell)
+                
+                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix}: пінги вимкнено.\n<i>Напишіть будь-що в чат, щоб увімкнути назад.</i>"
                 sent = await self._safe_answer(message, text, parse_mode="HTML")
                 await self.auto_cleanup(message, sent)
         else:
