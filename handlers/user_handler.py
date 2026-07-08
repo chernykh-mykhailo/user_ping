@@ -155,6 +155,9 @@ class UserHandler(BaseHandler):
         # v2.10.26: Тільки системні команди з префіксами / або !
         self.router.message(Command("setemoji", prefix="/!"))(self.cmd_set_emoji)
 
+        # v2.11.0: Set Name (Premium)
+        self.router.message(Command("setname", prefix="/!"))(self.cmd_set_name)
+
         # v2.10.19: Admin forced actions
         self.router.message(Command("chat_reg"))(self.cmd_chat_reg)
         self.router.message(Command("force_unreg"))(self.cmd_force_unreg)
@@ -1503,3 +1506,106 @@ class UserHandler(BaseHandler):
             parse_mode="HTML",
         )
         await callback.answer("Встановлено! ✨")
+
+    async def cmd_set_name(self, message: Message):
+        """Змінює ім'я користувача (Premium функція)"""
+        user_id = str(message.from_user.id)
+
+        # Перевірка преміуму
+        if not self.premium_repo.has_premium(user_id):
+            sent = await message.answer(
+                "👑 <b>Premium Feature</b>\n\n"
+                "Зміна імені доступна тільки для Premium користувачів.\n\n"
+                "Купити Premium: /premium",
+                parse_mode="HTML",
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        # Отримуємо нове ім'я з команди
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            sent = await message.answer(
+                "❌ <b>Неправильний формат</b>\n\n"
+                "Використання:\n"
+                "<code>/setname Нове Ім'я</code>\n\n"
+                "Приклад:\n"
+                "<code>/setname Макс</code>",
+                parse_mode="HTML",
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        new_name = parts[1].strip()
+
+        # Валідація довжини
+        if len(new_name) < 2:
+            sent = await message.answer(
+                "❌ Ім'я занадто коротке (мінімум 2 символи)"
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        if len(new_name) > 20:
+            sent = await message.answer(
+                "❌ Ім'я занадто довге (максимум 20 символів)"
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        # Валідація на заборонені символи (захист від HTML ін'єкцій)
+        import html
+        from html import escape
+
+        # Перевіряємо на HTML теги
+        if "<" in new_name or ">" in new_name or "&" in new_name:
+            sent = await message.answer(
+                "❌ Ім'я не може містити HTML теги (<, >, &)"
+            )
+            await self.auto_cleanup(message, sent)
+            return
+
+        # Ескейпимо для безпеки
+        safe_name = escape(new_name)
+
+        # Отримуємо всі чати користувача
+        all_chats = self.chat_repo.get_all_chats()
+        updated_count = 0
+
+        for chat_id in all_chats:
+            # Перевіряємо чи є користувач в цьому чаті
+            chat_data = self.chat_repo.get_chat_data(chat_id)
+            users = chat_data.get("users", {})
+
+            if user_id in users:
+                # Оновлюємо ім'я в базі
+                user_entry = users[user_id]
+                if isinstance(user_entry, dict):
+                    user_entry["name"] = safe_name[:20]
+                else:
+                    # Старий формат: замінюємо на новий
+                    chat_data["users"][user_id] = {
+                        "name": safe_name[:20],
+                        "last_seen": "2000-01-01T00:00:00",
+                    }
+                updated_count += 1
+
+        # Зберігаємо зміни
+        if updated_count > 0:
+            # Оновлюємо кастомне ім'я в налаштуваннях (якщо користувач хоче його зберегти)
+            self.chat_repo.set_user_setting(user_id, "custom_name", safe_name[:20])
+
+        # Відповідь
+        emoji_html = ""
+        personal_emoji = self.chat_repo.get_user_setting(user_id, "personal_emoji", "")
+        if personal_emoji:
+            emoji_html = f"{render_emoji(personal_emoji)} "
+
+        sent = await message.answer(
+            f"✅ <b>Ім'я змінено!</b>\n\n"
+            f"{emoji_html}<b>Нове ім'я:</b> {safe_name}\n\n"
+            f"📊 Оновлено в <b>{updated_count}</b> чатах\n\n"
+            f"<i>Ім'я буде використовуватися в усіх пінгах.</i>",
+            parse_mode="HTML",
+        )
+        await self.auto_cleanup(message, sent)

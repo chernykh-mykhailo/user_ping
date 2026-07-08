@@ -115,8 +115,15 @@ def get_user_name(first_name=None, last_name=None, username=None, user_id=None, 
     Повертає найкраще доступне ім'я користувача.
     v2.10.16: Очищує від емодзі, бере ТІЛЬКИ перше ім'я, обмежує довжину, дозволяє апостроф.
     v2.11.0: Якщо ім'я - це емодзі, використовує username або генерує випадкове ім'я тваринки/персонажа.
+    v2.11.0: Перевіряє кастомне ім'я (setname) для Premium користувачів.
     """
     import re
+
+    # v2.11.0: Перевіряємо кастомне ім'я (Premium функція /setname)
+    if chat_repo and user_id:
+        custom_name = chat_repo.get_user_setting(user_id, "custom_name")
+        if custom_name:
+            return custom_name[:20]
 
     name = ""
 

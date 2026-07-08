@@ -83,6 +83,8 @@ class PaymentHandler(BaseHandler):
             "👑 <b>Premium статус</b>\n\n"
             "Отримайте доступ до ексклюзивних функцій:\n"
             "• 🚫 /superunreg — Постійне вимкнення пінгів\n"
+            "• 🎭 Власний емодзі в профілі (!setemoji)\n"
+            "• ✏️ Зміна імені (/setname)\n"
             "• 🎯 Пріоритетна підтримка\n\n"
             "<b>Тарифи:</b>\n"
             f"📅 {month_plan.name} — {month_plan.price} ⭐ Stars\n"
