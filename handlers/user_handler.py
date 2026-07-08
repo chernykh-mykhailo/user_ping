@@ -74,20 +74,36 @@ class UserHandler(BaseHandler):
 
         # Unreg/Reg - case-insensitive without shadowing (v2.10.28)
         self.router.message(Command("unreg"))(self.cmd_unreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?анрег\b", re.I)))(self.cmd_unreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?unreg\b", re.I)))(self.cmd_unreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?анрег\b", re.I)))(
+            self.cmd_unreg
+        )
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?unreg\b", re.I)))(
+            self.cmd_unreg
+        )
 
         self.router.message(Command("superunreg"))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?суперанрег\b", re.I)))(self.cmd_superunreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?superunreg\b", re.I)))(self.cmd_superunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?суперанрег\b", re.I)))(
+            self.cmd_superunreg
+        )
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?superunreg\b", re.I)))(
+            self.cmd_superunreg
+        )
 
         self.router.message(Command("superpuperunreg", "spa"))(self.cmd_superpuperunreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]суперпуперанрег\b", re.I)))(self.cmd_superpuperunreg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]superpuperunreg\b", re.I)))(self.cmd_superpuperunreg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]суперпуперанрег\b", re.I)))(
+            self.cmd_superpuperunreg
+        )
+        self.router.message(F.text.regexp(re.compile(r"^[!/]superpuperunreg\b", re.I)))(
+            self.cmd_superpuperunreg
+        )
 
         self.router.message(Command("reg"))(self.cmd_reg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?рег\b", re.I)))(self.cmd_reg)
-        self.router.message(F.text.regexp(re.compile(r"^[!/]?reg\b", re.I)))(self.cmd_reg)
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?рег\b", re.I)))(
+            self.cmd_reg
+        )
+        self.router.message(F.text.regexp(re.compile(r"^[!/]?reg\b", re.I)))(
+            self.cmd_reg
+        )
 
         # Global Unreg (v1.5.0+)
         self.router.message(Command("gunreg"))(self.cmd_global_unreg)
@@ -677,20 +693,28 @@ class UserHandler(BaseHandler):
         if len(args) > 1:
             potential_trigger = args[1].strip().lower().lstrip("!/")
             triggers = self.chat_repo.get_call_triggers(chat_id)
-            
+
             # v2.10.26: Якщо це тригер - виходимо з нього
             if potential_trigger in triggers:
-                if self.chat_repo.remove_user_from_trigger(chat_id, potential_trigger, user_id):
-                    emoji = self.chat_repo.get_trigger_emoji(chat_id, potential_trigger) or ""
+                if self.chat_repo.remove_user_from_trigger(
+                    chat_id, potential_trigger, user_id
+                ):
+                    emoji = (
+                        self.chat_repo.get_trigger_emoji(chat_id, potential_trigger)
+                        or ""
+                    )
                     sent = await message.answer(
                         f"❌ Ви вийшли з ролі {render_emoji(emoji)} <code>!{potential_trigger}</code>",
-                        parse_mode="HTML"
+                        parse_mode="HTML",
                     )
                 else:
-                    sent = await message.answer(f"ℹ️ Ви і так не підписані на <code>!{potential_trigger}</code>", parse_mode="HTML")
+                    sent = await message.answer(
+                        f"ℹ️ Ви і так не підписані на <code>!{potential_trigger}</code>",
+                        parse_mode="HTML",
+                    )
                 await self.auto_cleanup(message, sent)
                 return
-            
+
             # Якщо не тригер - це цитата для загального анрегу
             quote = args[1].strip()
 
@@ -700,7 +724,7 @@ class UserHandler(BaseHandler):
             # Якщо налаштування не встановлено - дозволяємо всім
             if quote_mode is None:
                 quote_mode = "all"
-            
+
             has_premium = self.premium_repo.has_premium(user_id)
 
             # Якщо режим "premium" і у юзера немає преміум
@@ -752,14 +776,15 @@ class UserHandler(BaseHandler):
                     "tg-emoji:5458603043203327669",
                     "tg-emoji:5319290706601204434",
                     "tg-emoji:5244807637157029775",
+                    "tg-emoji:5253742066780878262",
                 ]
                 random_bell = random.choice(bell_emojis)
                 bell_emoji_html = render_emoji(random_bell)
-                
+
                 # Fallback: якщо преміум-емодзі не відобразився (повернувся тільки ✨ без тегу), використовуємо звичайний
                 if bell_emoji_html == "✨" or "<tg-emoji" not in bell_emoji_html:
                     bell_emoji_html = "🔔"
-                
+
                 text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix} анрегнувся зі словами:\n<i>{safe_quote}</i>"
                 sent = await message.answer(text, parse_mode="HTML")
 
@@ -799,11 +824,11 @@ class UserHandler(BaseHandler):
                 ]
                 random_bell = random.choice(bell_emojis)
                 bell_emoji_html = render_emoji(random_bell)
-                
+
                 # Fallback: якщо преміум-емодзі не відобразився (повернувся тільки ✨ без тегу), використовуємо звичайний
                 if bell_emoji_html == "✨" or "<tg-emoji" not in bell_emoji_html:
                     bell_emoji_html = "🔔"
-                
+
                 text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix}: пінги вимкнено.\n<blockquote>Напишіть будь-що в чат, щоб увімкнути назад.</blockquote>"
                 sent = await self._safe_answer(message, text, parse_mode="HTML")
                 await self.auto_cleanup(message, sent)
@@ -978,17 +1003,22 @@ class UserHandler(BaseHandler):
             trigger_name = args[1].strip().lower()
             # Прибираємо ! або / з назви, якщо юзер ввів !reg !мафія
             trigger_name = trigger_name.lstrip("!/")
-            
+
             triggers = self.chat_repo.get_call_triggers(chat_id)
             if trigger_name in triggers:
                 if self.chat_repo.add_user_to_trigger(chat_id, trigger_name, user_id):
-                    emoji = self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
+                    emoji = (
+                        self.chat_repo.get_trigger_emoji(chat_id, trigger_name) or ""
+                    )
                     sent = await message.answer(
                         f"✅ Ви підписалися на роль {render_emoji(emoji)} <code>!{trigger_name}</code>",
-                        parse_mode="HTML"
+                        parse_mode="HTML",
                     )
                 else:
-                    sent = await message.answer(f"ℹ️ Ви вже підписані на <code>!{trigger_name}</code>", parse_mode="HTML")
+                    sent = await message.answer(
+                        f"ℹ️ Ви вже підписані на <code>!{trigger_name}</code>",
+                        parse_mode="HTML",
+                    )
                 await self.auto_cleanup(message, sent)
                 return
 
