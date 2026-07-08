@@ -174,6 +174,7 @@ class UserHandler(BaseHandler):
             last_name=user.last_name,
             username=user.username,
             user_id=user.id,
+            chat_repo=self.chat_repo,
         )
 
         # Додаємо в базу як "пасивного" учасника (не знімаємо анрег, якщо він був)
@@ -370,6 +371,7 @@ class UserHandler(BaseHandler):
             last_name=message.from_user.last_name,
             username=message.from_user.username,
             user_id=message.from_user.id,
+            chat_repo=self.chat_repo,
         )
 
         # Оновлюємо ім'я та знімаємо тимчасовий анрег

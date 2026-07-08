@@ -190,6 +190,7 @@ class AdminHandler(BaseHandler):
                         last_name=member.user.last_name,
                         username=member.user.username,
                         user_id=member.user.id,
+                        chat_repo=self.chat_repo,
                     )
                     self.chat_repo.save_user(chat_id, user_id, name, update_unreg=False)
                     admin_count += 1
@@ -255,12 +256,12 @@ class AdminHandler(BaseHandler):
             for uid, user_info in all_users.items():
                 if isinstance(user_info, dict):
                     old_name = user_info.get("name", "")
-                    new_name = get_user_name(first_name=old_name)
+                    new_name = get_user_name(first_name=old_name, chat_repo=self.chat_repo)
                     if old_name != new_name:
                         user_info["name"] = new_name
                         cleaned_count += 1
                 elif isinstance(user_info, str):
-                    new_name = get_user_name(first_name=user_info)
+                    new_name = get_user_name(first_name=user_info, chat_repo=self.chat_repo)
                     if user_info != new_name:
                         all_users[uid] = {
                             "name": new_name,

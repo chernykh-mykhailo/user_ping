@@ -64,7 +64,8 @@ class UserbotCollector:
                     first_name=user.first_name,
                     last_name=user.last_name,
                     username=user.username,
-                    user_id=user.id,
+                    user_id=str(user.id),
+                    chat_repo=chat_repo,
                 )
                 self.chat_repo.save_user(
                     chat_id, str(user.id), name, username=user.username
@@ -84,7 +85,8 @@ class UserbotCollector:
                 first_name=getattr(sender, "first_name", None),
                 last_name=getattr(sender, "last_name", None),
                 username=getattr(sender, "username", None),
-                user_id=sender.id,
+                user_id=str(sender.id),
+                chat_repo=chat_repo,
             )
 
             # v2.2.0: Ignore commands to prevent race conditions with unreg
@@ -210,7 +212,8 @@ class UserbotCollector:
                     first_name=user.first_name,
                     last_name=user.last_name,
                     username=user.username,
-                    user_id=user.id,
+                    user_id=str(user.id),
+                    chat_repo=chat_repo,
                 )
 
                 # Витягуємо статус із профілю (v1.8.5)
@@ -283,7 +286,8 @@ class UserbotCollector:
                     first_name=user.first_name,
                     last_name=user.last_name,
                     username=user.username,
-                    user_id=user.id,
+                    user_id=str(user.id),
+                    chat_repo=chat_repo,
                 )
                 results[user_id] = name
                 
@@ -312,7 +316,8 @@ class UserbotCollector:
                             first_name=user.first_name,
                             last_name=user.last_name,
                             username=user.username,
-                            user_id=user.id,
+                            user_id=str(user.id),
+                            chat_repo=chat_repo,
                         )
                         results[user_id] = name
                         

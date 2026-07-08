@@ -48,7 +48,8 @@ class ActivityMiddleware(BaseMiddleware):
                                 first_name=member.first_name,
                                 last_name=member.last_name,
                                 username=member.username,
-                                user_id=member.id,
+                                user_id=str(event.from_user.id),
+                                chat_repo=chat_repo,
                             )
                             self.chat_repo.save_user(
                                 chat_id,
@@ -113,7 +114,8 @@ class ActivityMiddleware(BaseMiddleware):
                     first_name=event.from_user.first_name,
                     last_name=event.from_user.last_name,
                     username=event.from_user.username,
-                    user_id=event.from_user.id,
+                    user_id=str(member.user.id),
+                    chat_repo=chat_repo,
                 )
 
                 # Перевіряємо чи був в temp_unreg
