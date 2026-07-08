@@ -13,7 +13,7 @@ def render_emoji(emoji_data: str) -> str:
         emoji_data: Рядок з емодзі або формат 'tg-emoji:ID'
 
     Returns:
-        HTML-код для відображення
+        HTML-код для відображення в повідомленнях
     """
     if not emoji_data:
         return ""
@@ -23,6 +23,27 @@ def render_emoji(emoji_data: str) -> str:
         return f'<tg-emoji emoji-id="{emoji_id}">✨</tg-emoji>'
 
     return html.escape(str(emoji_data))
+
+
+def render_emoji_for_button(emoji_data: str) -> str:
+    """
+    Рендерить емодзі для кнопок (InlineKeyboardButton)
+    Кнопки не підтримують HTML, тому повертаємо тільки символ емодзі
+    
+    Args:
+        emoji_data: Рядок з емодзі або формат 'tg-emoji:ID'
+
+    Returns:
+        Текст емодзі для відображення на кнопці
+    """
+    if not emoji_data:
+        return ""
+
+    # Для преміум-емодзі повертаємо заміну (✨), оскільки кнопки не підтримують tg-emoji
+    if str(emoji_data).startswith("tg-emoji:"):
+        return "✨"
+
+    return str(emoji_data)
 
 
 def extract_emoji_info(message) -> dict:

@@ -18,7 +18,7 @@ from aiogram.types import (
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from .base_handler import BaseHandler
-from utils.helpers import get_clean_chat_id, render_emoji, extract_custom_emoji_id
+from utils.helpers import get_clean_chat_id, render_emoji, render_emoji_for_button, extract_custom_emoji_id
 
 from config import PING_LIMITS, EMOJIS, ADMIN_USER_ID
 from aiogram.exceptions import TelegramBadRequest, TelegramServerError
@@ -1798,7 +1798,8 @@ class PingHandler(BaseHandler):
             # v2.11.0: Show registered count without brackets
             registered_count = len(self.chat_repo.get_trigger_users(chat_id_str, t))
             count_display = f" {registered_count}" if registered_count > 0 else ""
-            label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
+            # v2.11.0: Use render_emoji_for_button for InlineKeyboardButton (no HTML support)
+            label = f"{render_emoji_for_button(emoji)} {t.capitalize()}{count_display}"
             
             row.append(
                 InlineKeyboardButton(text=label, callback_data=f"role_{t}")
@@ -1838,7 +1839,8 @@ class PingHandler(BaseHandler):
             # v2.11.0: Show registered count without brackets
             registered_count = len(self.chat_repo.get_trigger_users(chat_id, t))
             count_display = f" {registered_count}" if registered_count > 0 else ""
-            label = f"{render_emoji(emoji)} {t.capitalize()}{count_display}"
+            # v2.11.0: Use render_emoji_for_button for InlineKeyboardButton (no HTML support)
+            label = f"{render_emoji_for_button(emoji)} {t.capitalize()}{count_display}"
             
             row.append(
                 InlineKeyboardButton(text=label, callback_data=f"role_{t}")
@@ -1981,7 +1983,7 @@ class PingHandler(BaseHandler):
                 
                 keyboard.append([
                     InlineKeyboardButton(
-                        text=f"{render_emoji(emoji)} !{t} ({user_count})",
+                        text=f"{render_emoji_for_button(emoji)} !{t} ({user_count})",
                         callback_data=f"admin_edit_{t}"
                     ),
                     InlineKeyboardButton(
