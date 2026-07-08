@@ -178,34 +178,14 @@ class PingBot:
         commands = [
             BotCommand(command="all", description="📢 Викликати всіх"),
             BotCommand(command="active", description="🔥 Тільки активні (24г)"),
-            BotCommand(command="active_week", description="📅 Актив за тиждень"),
-            BotCommand(command="writers", description="✍️ Ті, хто писав"),
-            BotCommand(command="online", description="🌐 Ті, хто онлайн"),
-            BotCommand(command="stop", description="🛑 Зупинити виклик"),
-            BotCommand(command="settings", description="⚙️ Налаштування"),
-            BotCommand(command="stats", description="📊 Статистика"),
-            BotCommand(command="sync", description="🔄 Оновити базу"),
-            BotCommand(command="help", description="ℹ️ Довідка"),
-            BotCommand(command="premium", description="👑 Premium меню"),
+            BotCommand(command="anybody", description="🎲 Випадковий юзер"),
             BotCommand(command="emoji", description="🤪 Виклик емодзі"),
             BotCommand(command="admins", description="👮 Виклик адмінів"),
-            BotCommand(command="anybody", description="🎲 Випадковий юзер"),
-            BotCommand(command="unreg", description="🔇 Вимкнути пінг (тимчасово)"),
-            BotCommand(command="superunreg", description="🚫 Вимкнути пінг (Premium)"),
-            BotCommand(command="spanreg", description="🚫 SuperUnreg (alias)"),
+            BotCommand(command="stop", description="🛑 Зупинити виклик"),
+            BotCommand(command="unreg", description="🔇 Вимкнути пінг (тимч.)"),
             BotCommand(command="reg", description="🔔 Увімкнути пінг"),
-            BotCommand(command="chat_reg", description="👮 Реєстрація чату (Admin)"),
-            BotCommand(command="gunreg", description="🌍 Глобальний анрег (всі чати)"),
-            BotCommand(command="gsuperunreg", description="👑 Глобальний SuperUnreg"),
-            BotCommand(command="greg", description="🔔 Глобальний рег"),
-            BotCommand(
-                command="force_unreg", description="👮 Примусовий анрег (Reply)"
-            ),
-            BotCommand(command="force_reg", description="🔔 Примусовий рег (Reply)"),
-            BotCommand(
-                command="setemoji",
-                description="🎭 Встановити персональний емодзі (Premium)",
-            ),
+            BotCommand(command="settings", description="⚙️ Налаштування"),
+            BotCommand(command="help", description="ℹ️ Довідка"),
         ]
 
         try:
