@@ -69,7 +69,12 @@ class PingBot:
 
         # Bot та Dispatcher
         self.bot = Bot(token=BOT_TOKEN)
-        self.dp = Dispatcher()
+        
+        # FSM Storage (v2.11.0) - MUST be passed to Dispatcher
+        from aiogram.fsm.storage.memory import MemoryStorage
+        storage = MemoryStorage()
+        self.dp = Dispatcher(storage=storage)
+        self.dp.storage = storage  # Also set as attribute for access
 
         # Userbot (Dynamic state)
         self.use_userbot = self.chat_repo.get_global_setting("use_userbot", USE_USERBOT)
@@ -102,6 +107,7 @@ class PingBot:
         # Реєструємо Middleware (v1.6.0)
         from core.middleware import ActivityMiddleware
 
+        # Register ActivityMiddleware AFTER FSM middleware (use outer_middleware but FSM runs first)
         self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo, self.bot))
 
         self.ping_handler = PingHandler(

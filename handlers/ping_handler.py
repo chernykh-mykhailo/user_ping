@@ -8,7 +8,7 @@ import random
 import re
 from datetime import datetime, timedelta
 from aiogram import F, Bot
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -16,6 +16,7 @@ from aiogram.types import (
     CallbackQuery,
 )
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from .base_handler import BaseHandler
 from utils.helpers import get_clean_chat_id, render_emoji, extract_custom_emoji_id
 
@@ -173,11 +174,11 @@ class PingHandler(BaseHandler):
         self.router.message(F.text.regexp(re.compile(r"^!(\S+)$", re.I)))(self.cmd_call_trigger)
 
         # FSM handlers for admin panel (MUST be before catch-all)
-        from aiogram.fsm.state import State
-        self.router.message(AdminStates.waiting_for_trigger_name)(
+        # Aiogram 3.x: MUST use StateFilter for Router-based handlers
+        self.router.message(StateFilter(AdminStates.waiting_for_trigger_name), F.text)(
             self.handle_trigger_creation
         )
-        self.router.message(AdminStates.waiting_for_emoji)(
+        self.router.message(StateFilter(AdminStates.waiting_for_emoji), F.text)(
             self.handle_emoji_input
         )
 
@@ -2015,7 +2016,7 @@ class PingHandler(BaseHandler):
         except Exception as e:
             self.logger.error(f"Failed to send admin panel: {e}")
 
-    async def callback_admin_panel(self, callback: CallbackQuery):
+    async def callback_admin_panel(self, callback: CallbackQuery, state: FSMContext):
         """Обробляє натискання в адмін панелі"""
         if not await self._is_admin(callback.message.chat.id, callback.from_user.id):
             await callback.answer("❌ Недостатньо прав", show_alert=True)
@@ -2040,11 +2041,6 @@ class PingHandler(BaseHandler):
         
         elif data == "admin_create":
             # Set state for creating trigger
-            from aiogram.fsm.context import FSMContext
-            state = FSMContext(
-                storage=self._storage,
-                key=(str(callback.message.chat.id), callback.from_user.id)
-            )
             await state.set_state(AdminStates.waiting_for_trigger_name)
             keyboard = [[
                 InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")
@@ -2104,11 +2100,6 @@ class PingHandler(BaseHandler):
         
         elif data.startswith("admin_setemoji_"):
             trigger_name = data.replace("admin_setemoji_", "")
-            from aiogram.fsm.context import FSMContext
-            state = FSMContext(
-                storage=self._storage,
-                key=(str(callback.message.chat.id), callback.from_user.id)
-            )
             await state.set_state(AdminStates.waiting_for_emoji)
             await state.update_data(trigger_name=trigger_name)
             keyboard = [[
@@ -2160,8 +2151,9 @@ class PingHandler(BaseHandler):
         await callback.answer()
 
     # FSM Handlers for Admin Panel
-    async def handle_trigger_creation(self, message: Message, state):
+    async def handle_trigger_creation(self, message: Message, state: FSMContext):
         """Обробляє створення тригера через панель"""
+        self.logger.info(f"FSM: handle_trigger_creation called with text: {message.text}")
         if not await self._is_admin(message.chat.id, message.from_user.id):
             await state.clear()
             return
@@ -2195,6 +2187,7 @@ class PingHandler(BaseHandler):
             return
         
         # Create trigger
+        self.logger.info(f"FSM: Creating trigger '{trigger_name}' in chat {chat_id}")
         if self.chat_repo.create_call_trigger(chat_id, trigger_name):
             await message.answer(
                 f"✅ Тригер <code>!{trigger_name}</code> створено!\n\n"
@@ -2216,7 +2209,7 @@ class PingHandler(BaseHandler):
         try: await message.delete()
         except: pass
 
-    async def handle_emoji_input(self, message: Message, state):
+    async def handle_emoji_input(self, message: Message, state: FSMContext):
         """Обробляє встановлення емодзі для тригера"""
         if not await self._is_admin(message.chat.id, message.from_user.id):
             await state.clear()
