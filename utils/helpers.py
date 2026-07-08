@@ -34,16 +34,16 @@ def get_emoji_id_for_button(emoji_data: str) -> tuple[str, str]:
 
     Returns:
         Tuple (text, icon_custom_emoji_id):
-        - text: текст для відображення на кнопці
+        - text: текст для відображення на кнопці (порожній рядок для преміум-емодзі)
         - icon_custom_emoji_id: ID преміум-емодзі або None
     """
     if not emoji_data:
         return "", None
 
-    # Для преміум-емодзі повертаємо ✨ як текст і ID для icon_custom_emoji_id
+    # Для преміум-емодзі повертаємо порожній рядок (Telegram замінить його на кастомний емодзі)
     if str(emoji_data).startswith("tg-emoji:"):
         emoji_id = emoji_data.split(":")[1]
-        return "✨", emoji_id
+        return "", emoji_id
 
     return str(emoji_data), None
 
