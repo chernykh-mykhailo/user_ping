@@ -756,8 +756,8 @@ class UserHandler(BaseHandler):
                 random_bell = random.choice(bell_emojis)
                 bell_emoji_html = render_emoji(random_bell)
                 
-                # Fallback: якщо преміум-емодзі не відобразився (замінився на ✨), використовуємо звичайний
-                if "✨" in bell_emoji_html:
+                # Fallback: якщо преміум-емодзі не відобразився (повернувся тільки ✨ без тегу), використовуємо звичайний
+                if bell_emoji_html == "✨" or "<tg-emoji" not in bell_emoji_html:
                     bell_emoji_html = "🔔"
                 
                 text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix} анрегнувся зі словами:\n<i>{safe_quote}</i>"
@@ -800,8 +800,8 @@ class UserHandler(BaseHandler):
                 random_bell = random.choice(bell_emojis)
                 bell_emoji_html = render_emoji(random_bell)
                 
-                # Fallback: якщо преміум-емодзі не відобразився (замінився на ✨), використовуємо звичайний
-                if "✨" in bell_emoji_html:
+                # Fallback: якщо преміум-емодзі не відобразився (повернувся тільки ✨ без тегу), використовуємо звичайний
+                if bell_emoji_html == "✨" or "<tg-emoji" not in bell_emoji_html:
                     bell_emoji_html = "🔔"
                 
                 text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix}: пінги вимкнено.\n<blockquote>Напишіть будь-що в чат, щоб увімкнути назад.</blockquote>"
