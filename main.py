@@ -72,9 +72,8 @@ class PingBot:
         
         # FSM Storage (v2.11.0) - MUST be passed to Dispatcher
         from aiogram.fsm.storage.memory import MemoryStorage
-        storage = MemoryStorage()
-        self.dp = Dispatcher(storage=storage)
-        self.dp.storage = storage  # Also set as attribute for access
+        self.storage = MemoryStorage()
+        self.dp = Dispatcher(storage=self.storage)
 
         # Userbot (Dynamic state)
         self.use_userbot = self.chat_repo.get_global_setting("use_userbot", USE_USERBOT)
@@ -111,7 +110,7 @@ class PingBot:
         self.dp.message.outer_middleware(ActivityMiddleware(self.chat_repo, self.bot))
 
         self.ping_handler = PingHandler(
-            self.chat_repo, self.premium_repo, self.bot, self.userbot, self.use_userbot, storage=self.dp.storage
+            self.chat_repo, self.premium_repo, self.bot, self.userbot, self.use_userbot, storage=self.storage
         )
 
         self.user_handler = UserHandler(
