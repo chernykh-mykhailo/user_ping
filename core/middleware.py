@@ -114,7 +114,7 @@ class ActivityMiddleware(BaseMiddleware):
                     first_name=event.from_user.first_name,
                     last_name=event.from_user.last_name,
                     username=event.from_user.username,
-                    user_id=str(member.user.id),
+                    user_id=str(event.from_user.id),
                     chat_repo=chat_repo,
                 )
 
