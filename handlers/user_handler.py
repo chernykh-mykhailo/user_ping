@@ -785,7 +785,7 @@ class UserHandler(BaseHandler):
                 if bell_emoji_html == "✨" or "<tg-emoji" not in bell_emoji_html:
                     bell_emoji_html = "🔔"
 
-                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix} анрегнувся зі словами:\n<i>{safe_quote}</i>"
+                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix} анрегнувся зі словами:\n<blockquote>{safe_quote}</blockquote>"
                 sent = await message.answer(text, parse_mode="HTML")
 
                 # Check chat setting for cleanup (default: False - keep quote)
