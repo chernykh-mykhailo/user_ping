@@ -25,25 +25,27 @@ def render_emoji(emoji_data: str) -> str:
     return html.escape(str(emoji_data))
 
 
-def render_emoji_for_button(emoji_data: str) -> str:
+def get_emoji_id_for_button(emoji_data: str) -> tuple[str, str]:
     """
-    Рендерить емодзі для кнопок (InlineKeyboardButton)
-    Кнопки не підтримують HTML, тому повертаємо тільки символ емодзі
+    Підготовлює емодзі для InlineKeyboardButton з підтримкою преміум-емодзі
     
     Args:
         emoji_data: Рядок з емодзі або формат 'tg-emoji:ID'
 
     Returns:
-        Текст емодзі для відображення на кнопці
+        Tuple (text, icon_custom_emoji_id):
+        - text: текст для відображення на кнопці
+        - icon_custom_emoji_id: ID преміум-емодзі або None
     """
     if not emoji_data:
-        return ""
+        return "", None
 
-    # Для преміум-емодзі повертаємо заміну (✨), оскільки кнопки не підтримують tg-emoji
+    # Для преміум-емодзі повертаємо ✨ як текст і ID для icon_custom_emoji_id
     if str(emoji_data).startswith("tg-emoji:"):
-        return "✨"
+        emoji_id = emoji_data.split(":")[1]
+        return "✨", emoji_id
 
-    return str(emoji_data)
+    return str(emoji_data), None
 
 
 def extract_emoji_info(message) -> dict:
