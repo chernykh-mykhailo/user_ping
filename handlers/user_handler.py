@@ -804,7 +804,7 @@ class UserHandler(BaseHandler):
                 if "✨" in bell_emoji_html:
                     bell_emoji_html = "🔔"
                 
-                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix}: пінги вимкнено.\n<i>Напишіть будь-що в чат, щоб увімкнути назад.</i>"
+                text = f"{bell_emoji_html} <b>{name}</b>{emoji_prefix}: пінги вимкнено.\n<blockquote>Напишіть будь-що в чат, щоб увімкнути назад.</blockquote>"
                 sent = await self._safe_answer(message, text, parse_mode="HTML")
                 await self.auto_cleanup(message, sent)
         else:
