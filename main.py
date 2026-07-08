@@ -177,15 +177,9 @@ class PingBot:
         """Встановлює команди бота для меню"""
         commands = [
             BotCommand(command="all", description="📢 Викликати всіх"),
-            BotCommand(command="active", description="🔥 Тільки активні (24г)"),
-            BotCommand(command="anybody", description="🎲 Випадковий юзер"),
-            BotCommand(command="emoji", description="🤪 Виклик емодзі"),
-            BotCommand(command="admins", description="👮 Виклик адмінів"),
-            BotCommand(command="stop", description="🛑 Зупинити виклик"),
-            BotCommand(command="unreg", description="🔇 Вимкнути пінг (тимч.)"),
-            BotCommand(command="reg", description="🔔 Увімкнути пінг"),
-            BotCommand(command="settings", description="⚙️ Налаштування"),
             BotCommand(command="help", description="ℹ️ Довідка"),
+            BotCommand(command="settings", description="⚙️ Налаштування"),
+            BotCommand(command="stop", description="🛑 Зупинити виклик"),
         ]
 
         try:
